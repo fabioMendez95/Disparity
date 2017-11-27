@@ -32,7 +32,6 @@ __host__ void AggregateCostCom(int* cost, int* L, int width, int length,int maxD
 __host__ int minBetweenNumbersInt(int a, int b, int c, int d);
 __host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int* L3, int* L6, int* L8, int maxDisparity, int width, int length);
 __host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
-__host__ void CensusTransformation (Mat image, int widthW, int lengthW, unsigned int* censusArray);
 __host__ void CostComputationCensus (unsigned int* censusL, unsigned int* censusR, int* cost, int maxDisparity, int width, int length);
 __host__ int HammingDistanceNumbers (unsigned int a, unsigned int b);
 
@@ -62,10 +61,12 @@ __host__ void SMG(){
 	Mat completeImage;
 	//Texture Creation
 	Mat leftD,rightD;
-	cudaArray* leftImageCUDA;
-	cudaArray* rightImageCUDA;
-	cudaChannelFormatDesc channelDesc1 = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
-	cudaChannelFormatDesc channelDesc2 = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+	uchar* imageLeftA,*imageRightA,*leftC,*rightC;
+
+	//CensusDeclarations
+	unsigned int* censusLa;
+	unsigned int* censusRa;
+	int* costK;
 
 	//Maximum box value is depending on bytes used
 	int BoxCostX = 9;
@@ -93,69 +94,56 @@ __host__ void SMG(){
 	Mat rightBlack;
 	cvtColor( right, rightBlack, CV_BGR2GRAY );
 
+	//Passing images to kernels----------------------------
+	imageLeftA = (uchar*)malloc((sizeof(uchar))*(left.cols)*(left.rows));
+	imageRightA= (uchar*)malloc((sizeof(uchar))*(right.cols)*(right.rows));
+	imageLeftA = leftBlack.data;
+	imageRightA= rightBlack.data;
+	cudaMalloc(&leftC,(sizeof(uchar))*(left.cols)*(left.rows));
+	cudaMalloc(&rightC,(sizeof(uchar))*(left.cols)*(left.rows));
+	cudaMemcpy(leftC,imageLeftA,(sizeof(uchar))*(left.cols)*(left.rows),cudaMemcpyHostToDevice);
+	cudaMemcpy(rightC,imageRightA,(sizeof(uchar))*(left.cols)*(left.rows),cudaMemcpyHostToDevice);
+	//Done passing images to kernels------------------------
 	//Done Converting Images
 
 	int decreseX = BoxCostX/2 + BoxCostX/2;
 	int decreseY = BoxCostY/2 + BoxCostY/2;
 
-	int dimX = (leftBlack.cols-decreseX) / threadx;
-	int dimY = (leftBlack.rows-decreseY) / thready;
+	int dimX = ((leftBlack.cols-decreseX) / threadx);
+	int dimY = ((leftBlack.rows-decreseY) / thready);
 	dim3 dimGrid(dimX,dimY);
 	dim3 dimBlock(threadx,thready);
-
 
 	//Timing
 	gettimeofday(&timstr, NULL);
 	double begin = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 
-	//Creating Textures CUDA
-	cudaMallocArray(&leftImageCUDA, &channelDesc1,leftBlack.cols,leftBlack.rows);
-	cudaMallocArray(&rightImageCUDA, &channelDesc2, rightBlack.cols,rightBlack.rows);
-
-	leftBlack.convertTo(leftD,CV_32F);
-	rightBlack.convertTo(rightD,CV_32F);
-
-	//cout << (int)leftD.at<uchar>(10,10) << " " << sizeof(float)<<endl;
-
-	cudaMemcpyToArray(leftImageCUDA, 0, 0, leftD.data, ((sizeof(float))*leftD.cols*leftD.rows),cudaMemcpyHostToDevice);
-	cudaMemcpyToArray(rightImageCUDA,0, 0,rightD.data,((sizeof(float))*rightD.cols*rightD.rows),cudaMemcpyHostToDevice);
-	ImageLeftTex.addressMode[0] = cudaAddressModeWrap;
-	ImageLeftTex.addressMode[1] = cudaAddressModeWrap;
-	ImageLeftTex.filterMode = cudaFilterModeLinear;
-	ImageLeftTex.normalized = false;
-	ImageRightTex.addressMode[0] = cudaAddressModeWrap;
-	ImageRightTex.addressMode[1] = cudaAddressModeWrap;
-	ImageRightTex.filterMode = cudaFilterModeLinear;
-	ImageRightTex.normalized = false;
-	cudaBindTextureToArray(ImageLeftTex, leftImageCUDA,channelDesc1);
-	cudaBindTextureToArray(ImageRightTex, rightImageCUDA, channelDesc2);
-	//DONE creating textures
-
-
-
 	//Census Transform
-	unsigned int* censusLa = (unsigned int*)malloc((sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
-	unsigned int* censusRa = (unsigned int*)malloc((sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
-	CensusTransformation(leftBlack,BoxCostX,BoxCostY,censusLa);
-	CensusTransformation(rightBlack,BoxCostX,BoxCostY,censusRa);
+	unsigned int* CLK =(unsigned int*)malloc((sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
+	unsigned int* CRK =(unsigned int*)malloc((sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
+	//CensusTransformation(leftBlack,BoxCostX,BoxCostY,censusLa);
+	//CensusTransformation(rightBlack,BoxCostX,BoxCostY,censusRa);
 
 	cudaMalloc(&censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
 	cudaMalloc(&censusRa,(sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
+	cudaMalloc(&costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
 
-	KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa);
+	KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,left.cols-decreseX,left.rows-decreseY,leftC,rightC,costK);
 	cudaDeviceSynchronize();
 
 
+	//cudaMemcpy(CLK,censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY),cudaMemcpyDeviceToHost);
+	//cudaMemcpy(CRK,censusRa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY),cudaMemcpyDeviceToHost);
 
-	cout << "census ok" << endl;
-	cout << "Image size: " << leftBlack.cols << " " << leftBlack.rows << endl;
+	//cout << "census ok" << endl;
 
 	//Cost Computation
 	int* cost = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	cudaMemcpy(cost,costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
 	//CostComputation(leftBlack,rightBlack,cost,maxDisparity,left.cols,left.rows,BoxCostX,BoxCostY);
-	CostComputationCensus(censusLa,censusRa,cost,maxDisparity,left.cols-decreseX,left.rows-decreseY);
-	cout << "cost ok" << endl;
-
+	//CostComputationCensus(CLK,CRK,cost,maxDisparity,left.cols-decreseX,left.rows-decreseY);
+	//cout << "cost ok" << endl;
+	cout << "Done CUDA " << endl;
 
 	//Aggregate Cost
 	int* L1 = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
@@ -207,12 +195,16 @@ __host__ void SMG(){
 
 
 	//free Memory
-	cudaUnbindTexture(ImageLeftTex);
-	cudaUnbindTexture(ImageRightTex);
-	cudaFree(censusLa);
-	cudaFree(censusRa);
+	cudaFree(leftC);
+	cudaFree(rightC);
 	free(censusLa);
 	free(censusRa);
+	free(CLK);
+	free(CRK);
+	free(costK);
+	free(cost);
+	free(imageLeftA);
+	free(imageRightA);
 	free(cost);
 	free(L1);
 	free(L2);
@@ -350,35 +342,6 @@ __host__ int minBetweenNumbersInt(int a, int b, int c, int d){
 
 
 //Testing Census---------------
-__host__ void CensusTransformation (Mat image, int widthW, int lengthW, unsigned int* censusArray){
-	unsigned int census = 0;
-	int shiftCount = 0;
-
-	int width = image.cols - widthW/2 - widthW/2;
-
-	for (int y = lengthW / 2; y < image.rows - lengthW / 2; y++) {
-		for (int x = widthW / 2; x < image.cols - widthW / 2; x++) {
-			census = 0;
-			shiftCount = 0;
-			int xA = x - widthW / 2;
-			int yA = y - lengthW / 2;
-
-			for (int j = y - lengthW / 2; j <= y + lengthW / 2; j++) {
-				for (int i = x - widthW / 2; i <= x + widthW / 2; i++) {
-					if ((int) image.at<uchar>(y, x) < (int) image.at<uchar>(j, i) && shiftCount != widthW * lengthW / 2) {
-						census <<= 1;
-						census = census + 1;
-					} else if (shiftCount != widthW * lengthW / 2) {
-						census <<= 1;
-					}
-					shiftCount++;
-				}
-			}
-			censusArray[yA * width + xA] = census;
-		}
-	}
-}
-
 __host__ void CostComputationCensus (unsigned int* censusL, unsigned int* censusR, int* cost, int maxDisparity, int width, int length){
 	for(int y=0;y<length;y++){
 		for(int xl=0;xl<width;xl++){
