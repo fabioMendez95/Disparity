@@ -32,8 +32,6 @@ __host__ void AggregateCostCom(int* cost, int* L, int width, int length,int maxD
 __host__ int minBetweenNumbersInt(int a, int b, int c, int d);
 __host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int* L3, int* L6, int* L8, int maxDisparity, int width, int length);
 __host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
-__host__ void CostComputationCensus (unsigned int* censusL, unsigned int* censusR, int* cost, int maxDisparity, int width, int length);
-__host__ int HammingDistanceNumbers (unsigned int a, unsigned int b);
 
 
 //sl::Camera zed;
@@ -104,7 +102,6 @@ __host__ void SMG(){
 	cudaMemcpy(leftC,imageLeftA,(sizeof(uchar))*(left.cols)*(left.rows),cudaMemcpyHostToDevice);
 	cudaMemcpy(rightC,imageRightA,(sizeof(uchar))*(left.cols)*(left.rows),cudaMemcpyHostToDevice);
 	//Done passing images to kernels------------------------
-	//Done Converting Images
 
 	int decreseX = BoxCostX/2 + BoxCostX/2;
 	int decreseY = BoxCostY/2 + BoxCostY/2;
@@ -121,8 +118,6 @@ __host__ void SMG(){
 	//Census Transform
 	unsigned int* CLK =(unsigned int*)malloc((sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
 	unsigned int* CRK =(unsigned int*)malloc((sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
-	//CensusTransformation(leftBlack,BoxCostX,BoxCostY,censusLa);
-	//CensusTransformation(rightBlack,BoxCostX,BoxCostY,censusRa);
 
 	cudaMalloc(&censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
 	cudaMalloc(&censusRa,(sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
@@ -131,18 +126,10 @@ __host__ void SMG(){
 	KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,left.cols-decreseX,left.rows-decreseY,leftC,rightC,costK);
 	cudaDeviceSynchronize();
 
-
-	//cudaMemcpy(CLK,censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY),cudaMemcpyDeviceToHost);
-	//cudaMemcpy(CRK,censusRa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY),cudaMemcpyDeviceToHost);
-
-	//cout << "census ok" << endl;
-
 	//Cost Computation
 	int* cost = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
 	cudaMemcpy(cost,costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
-	//CostComputation(leftBlack,rightBlack,cost,maxDisparity,left.cols,left.rows,BoxCostX,BoxCostY);
-	//CostComputationCensus(CLK,CRK,cost,maxDisparity,left.cols-decreseX,left.rows-decreseY);
-	//cout << "cost ok" << endl;
+
 	cout << "Done CUDA " << endl;
 
 	//Aggregate Cost
@@ -338,44 +325,6 @@ __host__ int minBetweenNumbersInt(int a, int b, int c, int d){
 		min = d;
 	}
 	return min;
-}
-
-
-//Testing Census---------------
-__host__ void CostComputationCensus (unsigned int* censusL, unsigned int* censusR, int* cost, int maxDisparity, int width, int length){
-	for(int y=0;y<length;y++){
-		for(int xl=0;xl<width;xl++){
-			int start = xl-(maxDisparity);
-
-			unsigned int valueLeft = censusL[y*width+xl];
-			//cout << "Value Left " << valueLeft <<endl;
-			for(int xr = start; xr<=xl; xr++){
-				int valueToAssigned;
-				int dis = xl-xr;
-				//cout << dis<<" "<<xr << endl;
-				if(xr>=0){
-					unsigned int valueRight = censusR[y*width+xr];
-					//cout << "Value Right " << valueRight << endl;
-					valueToAssigned = HammingDistanceNumbers(valueLeft,valueRight);
-				}
-				else{
-					valueToAssigned = 99999;
-				}
-				cost[width*(y+dis*(length))+xl] =valueToAssigned;
-
-			}
-		}
-	}
-}
-
-__host__ int HammingDistanceNumbers (unsigned int a, unsigned int b){
-	unsigned int val = a ^ b;
-	int dist = 0;
-	while(val != 0){
-		val = val & (val-1);
-		dist++;
-	}
-	return dist;
 }
 
 

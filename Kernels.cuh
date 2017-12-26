@@ -2,21 +2,28 @@ __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned
 __device__ void CensusTransFormationKernel(int widthW, int lengthW, unsigned int* censusLa, unsigned int* censusRa,int widthImage, uchar* leftI, uchar* rightI);
 __device__ void CostComputationKernel(unsigned int* censusL, unsigned int* censusR, int* cost, int maxDisparity, int width, int length);
 __device__ int HammingDistanceKernel(unsigned int a, unsigned int b);
-
+__device__ void AggregateCostKernel();
 
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
-  /*int tidX = threadIdx.x;
-	int tidY = threadIdx.y;
-	int bidX = blockIdx.x;
-	int bidY = blockIdx.y;
-	int dGX  = gridDim.x;
-	int dGY  = gridDim.y;*/
+	//Hardcode size of image so this can be done
+	//__shared__ unsigned int* censusLa[widthImage*lenImage];
+	//__shared__ unsigned int* censusRa[widthImage*lenImage];
+
 	CensusTransFormationKernel(boxCostX,boxCostY,censusLa,censusRa,widthImage,leftI,rightI);
 	__syncthreads();
 	CostComputationKernel(censusLa,censusRa,cost,100,widthImage,lenImage);
 	__syncthreads();
-	//printf("BlockID: %d %d \t ThreadId: %d %d \t GridDims: %d %d \n",bidX,bidY,tidX,tidY,dGX,dGY);
 }
+
+__device__ void AggregateCostKernel(int* cost, int width, int lenght, int maxDisparity){
+	//Penalties
+	int p1 = 5;
+	int p2 = 100;
+
+
+
+}
+
 
 __device__ void CensusTransFormationKernel(int widthW, int lengthW, unsigned int* censusLa, unsigned int* censusRa,int widthImage, uchar* leftI, uchar* rightI){
 	int xA = threadIdx.x + (blockIdx.x * blockDim.x);
