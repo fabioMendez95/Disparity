@@ -30,7 +30,7 @@ using namespace cv;
 __host__ void SMG();
 __host__ void AggregateCostCom(int* cost, int* L, int width, int length,int maxDisparity, int directionx, int directiony);
 __host__ int minBetweenNumbersInt(int a, int b, int c, int d);
-__host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int* L3, int* L6, int* L8, int maxDisparity, int width, int length);
+__host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4,/*int* L5, int* L6, int* L7, int* L8,*/ int maxDisparity, int width, int length);
 __host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
 
 __host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length);
@@ -62,17 +62,17 @@ __host__ void SMG(){
 	//Texture Creation
 	Mat leftD,rightD;
 	uchar* imageLeftA,*imageRightA,*leftC,*rightC;
-	startInfo* initialInfo;
+	startInfo* initialInfo, *initialInfoToKernel;
 
 	//CensusDeclarations
 	unsigned int* censusLa;
 	unsigned int* censusRa;
 	int* costK;
-	/*int* L1;
+	int* L1;
 	int* L2;
 	int* L3;
 	int* L4;
-	int* L5;
+	/*int* L5;
 	int* L6;
 	int* L7;
 	int* L8;*/
@@ -132,7 +132,7 @@ __host__ void SMG(){
 	cudaMalloc(&costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
 
 	KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,left.cols-decreseX,left.rows-decreseY,leftC,rightC,costK);
-	cudaDeviceSynchronize();
+	cout << "Synchronise status: "<<cudaDeviceSynchronize() << endl;
 
 	//------------Done-First-Kernel-----------------------------
 
@@ -140,33 +140,56 @@ __host__ void SMG(){
 	//Second Kernel, Semi global matching and disparity Selection
 	int widthR = left.cols-decreseX;
 	int lengthR = left.rows-decreseY;
-	int threadNum = 10;
-	int pathNumber =((widthR+lengthR-1)*4 + widthR *2 + lengthR*2);
-	dim3 dimGrid2(pathNumber);
+	int threadNum = 229; // pathNumber is divisible by this, 437 blocks
+	int pathNumber =/*(widthR+lengthR-1)*4 + */widthR *2 + lengthR*2;
+	dim3 dimGrid2(pathNumber/threadNum);
 	dim3 dimBlock2(threadNum);
 	//Assigning Paths
-	/*cudaMalloc(&L1,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	cudaMalloc(&L2,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	cudaMalloc(&L3,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	cudaMalloc(&L4,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	cudaMalloc(&L5,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	cudaMalloc(&L6,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	cudaMalloc(&L7,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	cudaMalloc(&L8,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
-	*/
+	cout <<"CUDA malloc " <<cudaMalloc(&L1,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+	cout <<"CUDA malloc " <<cudaMalloc(&L2,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+	cout <<"CUDA malloc " <<cudaMalloc(&L3,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+	cout <<"CUDA malloc " <<cudaMalloc(&L4,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+	//cout <<"this new " <<cudaMalloc(&L5,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+	//cout <<"this new " <<cudaMalloc(&L6,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+	//cout <<"this new " <<cudaMalloc(&L7,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+	//cout <<"this new " <<cudaMalloc(&L8,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+
+
+	//Setting Up initial Info, this is done just once in the algorithm.
 	initialInfo = (startInfo*)malloc((sizeof(startInfo))*pathNumber);
 	getKernelInitialInformation(pathNumber,initialInfo,widthR,lengthR);
-	KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK, widthR, lengthR);
-	cudaDeviceSynchronize();
-	//------------Done-Second-Kernel-----------------------------
+	cudaMalloc(&initialInfoToKernel,(sizeof(startInfo))*pathNumber);
+	cudaMemcpy(initialInfoToKernel,initialInfo,(sizeof(startInfo))*pathNumber,cudaMemcpyHostToDevice);
 
-	int* cost = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
-	cudaMemcpy(cost,costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,maxDisparity,L1,L2,L3,L4/*,L5,L6,L7,L8*/);
+	cout << "Synchronise status: "<<cudaDeviceSynchronize() << endl;
+
+	//------------Done-Second-Kernel-----------------------------
+	//int* cost = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	//cudaMemcpy(cost,costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
 	//Cost From GPU to host
 	cout << "Done CUDA " << endl;
+	int* L1S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	int* L2S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	int* L3S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	int* L4S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	//int* L5S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	//int* L6S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	//int* L7S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	//int* L8S = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
 
-	//Aggregate Cost
-	int* L1 = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
+	cudaMemcpy(L1S,L1,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	cudaMemcpy(L2S,L2,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	cudaMemcpy(L3S,L3,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	cudaMemcpy(L4S,L4,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	//cudaMemcpy(L5S,L5,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	//cudaMemcpy(L6S,L6,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	//cudaMemcpy(L7S,L7,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	//cudaMemcpy(L8S,L8,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
+	cout << "Path Number " << pathNumber << endl;
+	cout << L1S[widthR*(369+99*(lengthR))+100] << endl;
+	//Aggregate Cost---------------------------------------------------------------------------------
+	/*int* L1 = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
 	AggregateCostCom(cost,L1,left.cols-decreseX,left.rows-decreseY,maxDisparity,-1,-1);
 	cout << "Done" << endl;
 
@@ -196,17 +219,17 @@ __host__ void SMG(){
 
 	int* L8 = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
 	AggregateCostCom(cost,L8,left.cols-decreseX,left.rows-decreseY,maxDisparity,1,1);
-	cout << "Done" << endl;
+	cout << "Done" << endl;*/
+	//Done Aggregate Cost----------------------------------------------------------------------------
 
 
 
-
-	//Disparity Selection
-	Mat disparity = DisparitySelectionP(L1,L2,L3,L4,L5,L6,L7,L8,maxDisparity,left.cols-decreseX,left.rows-decreseY);
+	//Disparity Selection--------------------------------------------------------------------------------------------
+	Mat disparity = DisparitySelectionP(L1S,L2S,L3S,L4S/*,L5S,L6S,L7S,L8S*/,maxDisparity,left.cols-decreseX,left.rows-decreseY);
 	gettimeofday(&timstr, NULL);
 	double end = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 	printf("Elapsed time Local Matching:\t\t\t%.6lf (s)\n", end - begin);
-
+	//---------------------------------------------------------------------------------------------------------------
 
 	namedWindow("SMG");
 	imshow("SMG",disparity);
@@ -220,17 +243,27 @@ __host__ void SMG(){
 	cudaFree(censusLa);
 	cudaFree(censusRa);
 	cudaFree(costK);
-	free(cost);
-	free(imageLeftA);
-	free(imageRightA);
-	free(L1);
-	free(L2);
-	free(L3);
-	free(L4);
-	free(L5);
-	free(L6);
-	free(L7);
-	free(L8);
+	//free(cost);
+	free(L1S);
+	free(L2S);
+	free(L3S);
+	free(L4S);
+	/*free(L5S);
+	free(L6S);
+	free(L7S);
+	free(L8S);*/
+
+	cudaFree(L1);
+	cudaFree(L2);
+	cudaFree(L3);
+	cudaFree(L4);
+	/*cudaFree(L5);
+	cudaFree(L6);
+	cudaFree(L7);
+	cudaFree(L8);*/
+
+	cudaFree(initialInfoToKernel);
+
 	free(initialInfo);
 }
 
@@ -308,6 +341,7 @@ __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, in
 			pixelDi[LA].directionX = -1;
 			pixelDi[LA].directionY = 0;
 		} else if (blockID < 2 * width + 2 * length + (width + length - 1)) {
+			cout << "Should not happen \n";
 			ID = blockID - 2 * width - 2 * length;
 			pixelDi[LA].directionX = 1;
 			pixelDi[LA].directionY = 1;
@@ -343,7 +377,7 @@ __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, in
 
 
 //Disparity Selection Process
-__host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int* L3, int* L6, int* L8, int maxDisparity, int width, int length){
+__host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4/*,int* L5, int* L6, int* L7, int* L8*/, int maxDisparity, int width, int length){
 	Mat disparity(length,width,CV_8U);
 
 	for(int y=0; y<length; y++){
@@ -352,8 +386,12 @@ __host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int
 			int disPix = 0;
 			for (int d = 0; d<maxDisparity; d++){
 				int sumAgg = L1[width*(y+d*length)+x] + L2[width*(y+d*(length))+x]+
-						L3[width*(y+d*length)+x] + L4[width*(y+d*(length))+x] + L5[width*(y+d*(length))+x]+
-						L6[width*(y+d*length)+x] + L7[width*(y+d*(length))+x] + L8[width*(y+d*length)+x];
+						L3[width*(y+d*length)+x] + L4[width*(y+d*(length))+x] /*+ L5[width*(y+d*(length))+x]+
+						L6[width*(y+d*length)+x] + L7[width*(y+d*(length))+x] + L8[width*(y+d*length)+x]*/;
+				if(x == 100 && y == 369 && d == 99){
+					cout << x << " " << y<< " : "<<L1[width*(y+d*length)+x] << endl;
+					cout << width << " " << length << endl;
+				}
 				if (sumAgg < costA){
 					costA = sumAgg;
 					disPix = d;
@@ -368,8 +406,8 @@ __host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int
 //Gets the cost Computation Across all Paths
 __host__ void AggregateCostCom(int* cost, int* L, int width, int length, int maxDisparity, int directionx, int directiony){
 	//penalties
-	int p1 = 10;
-	int p2 = 100;
+/*	int p1 = 10;
+	int p2 = 100;*/
 
 	int startX,startY, increaseX, increaseY;
 
