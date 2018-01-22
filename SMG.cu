@@ -33,6 +33,8 @@ __host__ int minBetweenNumbersInt(int a, int b, int c, int d);
 __host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int* L3, int* L6, int* L8, int maxDisparity, int width, int length);
 __host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
 
+__host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length);
+__host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, int width, int length);
 
 //sl::Camera zed;
 
@@ -60,11 +62,20 @@ __host__ void SMG(){
 	//Texture Creation
 	Mat leftD,rightD;
 	uchar* imageLeftA,*imageRightA,*leftC,*rightC;
+	startInfo* initialInfo;
 
 	//CensusDeclarations
 	unsigned int* censusLa;
 	unsigned int* censusRa;
 	int* costK;
+	/*int* L1;
+	int* L2;
+	int* L3;
+	int* L4;
+	int* L5;
+	int* L6;
+	int* L7;
+	int* L8;*/
 
 	//Maximum box value is depending on bytes used
 	int BoxCostX = 9;
@@ -115,10 +126,7 @@ __host__ void SMG(){
 	gettimeofday(&timstr, NULL);
 	double begin = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 
-	//Census Transform
-	unsigned int* CLK =(unsigned int*)malloc((sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
-	unsigned int* CRK =(unsigned int*)malloc((sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
-
+	//First Kernel, Census and cost Computation
 	cudaMalloc(&censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
 	cudaMalloc(&censusRa,(sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
 	cudaMalloc(&costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
@@ -126,10 +134,35 @@ __host__ void SMG(){
 	KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,left.cols-decreseX,left.rows-decreseY,leftC,rightC,costK);
 	cudaDeviceSynchronize();
 
-	//Cost Computation
+	//------------Done-First-Kernel-----------------------------
+
+
+	//Second Kernel, Semi global matching and disparity Selection
+	int widthR = left.cols-decreseX;
+	int lengthR = left.rows-decreseY;
+	int threadNum = 10;
+	int pathNumber =((widthR+lengthR-1)*4 + widthR *2 + lengthR*2);
+	dim3 dimGrid2(pathNumber);
+	dim3 dimBlock2(threadNum);
+	//Assigning Paths
+	/*cudaMalloc(&L1,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	cudaMalloc(&L2,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	cudaMalloc(&L3,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	cudaMalloc(&L4,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	cudaMalloc(&L5,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	cudaMalloc(&L6,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	cudaMalloc(&L7,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	cudaMalloc(&L8,((sizeof(int))*(widthR)*(lengthR)*(maxDisparity+1)));
+	*/
+	initialInfo = (startInfo*)malloc((sizeof(startInfo))*pathNumber);
+	getKernelInitialInformation(pathNumber,initialInfo,widthR,lengthR);
+	KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK, widthR, lengthR);
+	cudaDeviceSynchronize();
+	//------------Done-Second-Kernel-----------------------------
+
 	int* cost = (int*)malloc((sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1));
 	cudaMemcpy(cost,costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1),cudaMemcpyDeviceToHost);
-
+	//Cost From GPU to host
 	cout << "Done CUDA " << endl;
 
 	//Aggregate Cost
@@ -177,22 +210,19 @@ __host__ void SMG(){
 
 	namedWindow("SMG");
 	imshow("SMG",disparity);
-	imwrite("disparity.png",disparity);
+	//imwrite("disparity.png",disparity);
 	waitKey(0);
 
 
 	//free Memory
 	cudaFree(leftC);
 	cudaFree(rightC);
-	free(censusLa);
-	free(censusRa);
-	free(CLK);
-	free(CRK);
-	free(costK);
+	cudaFree(censusLa);
+	cudaFree(censusRa);
+	cudaFree(costK);
 	free(cost);
 	free(imageLeftA);
 	free(imageRightA);
-	free(cost);
 	free(L1);
 	free(L2);
 	free(L3);
@@ -201,7 +231,117 @@ __host__ void SMG(){
 	free(L6);
 	free(L7);
 	free(L8);
+	free(initialInfo);
 }
+
+__host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length){
+	pointCoo point;
+	int startX;
+	int startY;
+	//Initial Point, this is the corner of the diagonals
+	if(ID == 0){
+		startX = 0;
+		startY = 0;
+		if(pathX == -1){
+			startX = width - 1;
+		}
+		if(pathY == -1){
+			startY = length - 1;
+		}
+	}
+	//As diagonals go through the width and length, this needs to be divided into two segments
+	//Segment 1 across the x axis of the image, fix y coordinate of the image
+	else if (ID < width){
+		startX = ID;
+		startY = 0;
+		if(pathX == -1){
+			startX = startX - 1;
+		}
+		if(pathY == -1){
+			startY = length-1;
+		}
+	}
+	//Segment 2 across the y axis of the image, fix x coordinate
+	else if (ID < width + length - 1){
+		int newID = ID - width;
+		startX = 0;
+		startY = newID;
+		if (pathX == -1){
+			startX = width -1;
+		}
+		if (pathY == -1){
+			startY = startY -1;
+		}
+	}
+
+	point.x = startX;
+	point.y = startY;
+	return point;
+}
+
+__host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, int width, int length) {
+	for (int blockID = 0; blockID < pathNumber; blockID++) {
+		int ID = blockID;
+		int LA = blockID; // Location in Array
+
+		if (blockID < width) {
+			pixelDi[LA].startX = ID;
+			pixelDi[LA].startY = 0;
+			pixelDi[LA].directionX = 0;
+			pixelDi[LA].directionY = 1;
+		} else if (blockID < 2 * width) {
+			ID = blockID - width;
+			pixelDi[LA].startX = ID;
+			pixelDi[LA].startY = length - 1;
+			pixelDi[LA].directionX = 0;
+			pixelDi[LA].directionY = -1;
+		} else if (blockID < 2 * width + length) {
+			ID = blockID - 2 * width;
+			pixelDi[LA].startX = 0;
+			pixelDi[LA].startY = ID;
+			pixelDi[LA].directionX = 1;
+			pixelDi[LA].directionY = 0;
+		} else if (blockID < 2 * width + 2 * length) {
+			ID = blockID - 2 * width - length;
+			pixelDi[LA].startX = width - 1;
+			pixelDi[LA].startY = ID;
+			pixelDi[LA].directionX = -1;
+			pixelDi[LA].directionY = 0;
+		} else if (blockID < 2 * width + 2 * length + (width + length - 1)) {
+			ID = blockID - 2 * width - 2 * length;
+			pixelDi[LA].directionX = 1;
+			pixelDi[LA].directionY = 1;
+			pointCoo point = getPoint(ID, 1, 1, width, length);
+			pixelDi[LA].startX = point.x;
+			pixelDi[LA].startY = point.y;
+		} else if (blockID < 2 * width + 2 * length + 2 * (width + length - 1)) {
+			ID = blockID - 2 * width - 2 * length - (width + length - 1);
+			pixelDi[LA].directionX = -1;
+			pixelDi[LA].directionY = -1;
+			pointCoo point = getPoint(ID, -1, -1, width, length);
+			pixelDi[LA].startX = point.x;
+			pixelDi[LA].startY = point.y;
+		} else if (blockID < 2 * width + 2 * length + 3 * (width + length - 1)) {
+			ID = blockID - 2 * width - 2 * length - 2 * (width + length - 1);
+			pixelDi[LA].directionX = 1;
+			pixelDi[LA].directionY = -1;
+			pointCoo point = getPoint(ID, 1, -1, width, length);
+			pixelDi[LA].startX = point.x;
+			pixelDi[LA].startY = point.y;
+		} else if (blockID < 2 * width + 2 * length + 4 * (width + length - 1)) {
+			ID = blockID - 2 * width - 2 * length - 3 * (width + length - 1);
+			pixelDi[LA].directionX = -1;
+			pixelDi[LA].directionY = 1;
+			pointCoo point = getPoint(ID, -1, 1, width, length);
+			pixelDi[LA].startX = point.x;
+			pixelDi[LA].startY = point.y;
+		} else {
+			printf("ifs are wrong \n");
+		}
+	}
+}
+
+
 //Disparity Selection Process
 __host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int* L3, int* L6, int* L8, int maxDisparity, int width, int length){
 	Mat disparity(length,width,CV_8U);
@@ -225,12 +365,10 @@ __host__ Mat DisparitySelectionP(int* L2, int* L4, int* L5, int* L7,int* L1, int
 	}
 	return disparity;
 }
-
-
 //Gets the cost Computation Across all Paths
 __host__ void AggregateCostCom(int* cost, int* L, int width, int length, int maxDisparity, int directionx, int directiony){
 	//penalties
-	int p1 = 5;
+	int p1 = 10;
 	int p2 = 100;
 
 	int startX,startY, increaseX, increaseY;

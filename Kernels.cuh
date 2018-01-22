@@ -1,8 +1,31 @@
+//Kernel 1 used for cost Computation
+//Kernel 2 used for path aggregation and disparity selection
+
+//Structure declarations
+struct startInfo{
+	int startX;
+	int startY;
+	int directionX;
+	int directionY;
+	//int disparityValue; //Dont need this, delete later just in case
+};
+struct pointCoo{
+	int x,y;
+};
+
+//Kernel 1 main
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI);
+//Kernel 2 main
+__global__ void KernelSemiGlobal(int* cost, int width, int length);
+
+//Kernel 1 functions
 __device__ void CensusTransFormationKernel(int widthW, int lengthW, unsigned int* censusLa, unsigned int* censusRa,int widthImage, uchar* leftI, uchar* rightI);
 __device__ void CostComputationKernel(unsigned int* censusL, unsigned int* censusR, int* cost, int maxDisparity, int width, int length);
 __device__ int HammingDistanceKernel(unsigned int a, unsigned int b);
-__device__ void AggregateCostKernel();
+
+//Kernel 2 functions
+__device__ void AggregateCostKernel(int* cost, int width, int lenght, int maxDisparity);
+
 
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
 	//Hardcode size of image so this can be done
@@ -15,16 +38,23 @@ __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned
 	__syncthreads();
 }
 
+__global__ void KernelSemiGlobal(int* cost, int width, int length){
+	int threadNum = threadIdx.x;
+	int blockX = blockIdx.x;
+	int blockY = blockIdx.y;
+
+	//printf("%d %d %d \n",threadNum, blockX, blockY);
+}
+
+//Kernel 2 Functions
 __device__ void AggregateCostKernel(int* cost, int width, int lenght, int maxDisparity){
 	//Penalties
 	int p1 = 5;
 	int p2 = 100;
-
-
-
 }
 
 
+//Kernel 1 functions
 __device__ void CensusTransFormationKernel(int widthW, int lengthW, unsigned int* censusLa, unsigned int* censusRa,int widthImage, uchar* leftI, uchar* rightI){
 	int xA = threadIdx.x + (blockIdx.x * blockDim.x);
 	int yA = threadIdx.y + (blockIdx.y * blockDim.y);

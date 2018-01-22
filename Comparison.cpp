@@ -103,8 +103,6 @@ void Comparison::CompareDisparities(){
 	cout << "Done" << endl;
 
 
-
-
 	//Disparity Selection
 	Mat disparity = DisparitySelectionP(L1,L2,L3,L4,L5,L6,L7,L8,maxDisparity,left.cols-decreseX,left.rows-decreseY);
 
