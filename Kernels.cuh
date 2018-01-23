@@ -13,13 +13,13 @@ struct pointCoo{
 	int x,y;
 };
 
-#define p1 10
+#define p1 1
 #define p2 100
 
 //Kernel 1 main
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI);
 //Kernel 2 main
-__global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* workInfo, int maxDisparity, int* L1, int* L2, int* L3, int* L4/*, int* L5, int* L6, int* L7, int* L8*/);
+__global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* workInfo, int maxDisparity, int* L1);
 
 //Kernel 1 functions
 __device__ void CensusTransFormationKernel(int widthW, int lengthW, unsigned int* censusLa, unsigned int* censusRa,int widthImage, uchar* leftI, uchar* rightI);
@@ -29,6 +29,7 @@ __device__ int HammingDistanceKernel(unsigned int a, unsigned int b);
 //Kernel 2 functions
 __device__ void AggregateCostKernel(int* cost, int width, int lenght, int maxDisparity, startInfo info, int* L);
 __device__ int minNumber(int a, int b, int c, int d);
+__device__ void swappArrays(int* x, int* y);
 
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
 	//Hardcode size of image so this can be done
@@ -41,47 +42,20 @@ __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned
 	__syncthreads();
 }
 
-__global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* workInfo, int maxDisparity, int* L1, int* L2, int* L3, int* L4/*, int* L5, int* L6, int* L7, int* L8*/){
-	//int threadNum = threadIdx.x;
-	//int blockX = blockIdx.x;
+__global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* workInfo, int maxDisparity, int* L1){
 	int ID = blockIdx.x * blockDim.x + threadIdx.x;
-	//Need work Distribution for non-divisible thread number
 	startInfo infoThread = workInfo[ID];
-	if(ID < width){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L1);
-	}
-	else if(ID < 2*width){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L2);
-	}
-	else if(ID < 2*width + length){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L3);
-	}
-	else if(ID < 2*width + 2*length){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L4);
-	}
-	/*else if(ID < 2*width +2*length + (width+length -1)){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L5);
-	}
-	else if(ID < 2*width +2*length + 2*(width+length -1)){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L6);
-	}
-	else if(ID < 2*width +2*length + 3*(width+length -1)){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L7);
-	}
-	else if(ID < 2*width +2*length + 4*(width+length -1)){
-		AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L8);
-	}*/
-	if(ID == 100){
-		printf("%d \n",L1[width*(369+99*(length))+100]);
-	}
+	AggregateCostKernel(cost,width,length,maxDisparity,infoThread,L1);
 	__syncthreads();
-	//printf("%d %d %d \n",threadNum, blockX, blockY);
 }
 
 //Kernel 2 Functions
 //TODO there is an out of bound in the array accessing, also check initial info
 __device__ void AggregateCostKernel(int* cost, int width, int length, int maxDisparity, startInfo info, int* L){
 	int ID = blockIdx.x * blockDim.x + threadIdx.x;
+
+	int previousResults[100];
+	int previousTemp[100];
 
 	int x = info.startX;
 	int y = info.startY;
@@ -102,7 +76,8 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, int maxDis
 		if(influenceX < 0 || influenceY < 0){ //This line is different, less checks
 			for(int d=0; d<maxDisparity; d++){
 				int costPixel = cost[width*(y+d*(length))+x];
-				L[width*(y+d*(length))+x] = costPixel; //this line is wrong
+				L[width*(y+d*(length))+x] = L[width*(y+d*(length))+x] + costPixel;
+				previousResults[d] = costPixel;
 				if(costPixel < minimum){
 					minimum = costPixel;
 				}
@@ -111,20 +86,19 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, int maxDis
 		else{
 			for(int d = 0; d<maxDisparity; d++){
 				int costPixel = cost[width*(y+d*(length))+x];
-				int currentD = L[width*(influenceY+d*(length))+influenceX];
-				int previousD= (d-1>=0)? L[width*(influenceY+(d-1)*(length))+influenceX]: 8888;
-				int nextD    = (d+1<maxDisparity)? L[width*(influenceY+(d+1)*(length))+influenceX] : 8888;
+				int currentD = previousResults[d];
+				int previousD= (d-1>=0)? previousResults[d-1]: 8888;
+				int nextD    = (d+1<maxDisparity)? previousResults[d+1] : 8888;
 
 				int valueToAssign = costPixel + minNumber(currentD,nextD+p1,previousD+p1,minToUse+p2) - minToUse;
-				L[width*(y+d*(length))+x] = valueToAssign;
+				L[width*(y+d*(length))+x] = L[width*(y+d*(length))+x] +  valueToAssign;
+				previousTemp[d] = valueToAssign;
 
 				if(valueToAssign < minimum){
 					minimum = valueToAssign;
 				}
-				/*if(ID == 100){
-					printf("%d %d : %d d: %d path: %d %d\n",x,y,valueToAssign,d,pathX,pathY);
-				}*/
 			}
+			swappArrays(previousResults,previousTemp);
 		}
 
 		minToUse = minimum;
@@ -132,9 +106,16 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, int maxDis
 		influenceY = y;
 		x = x + pathX;
 		y = y + pathY;
+		//previousResults = previousTemp;
 		if(x >= width || y >= length || x < 0 || y < 0){
 			done = true;
 		}
+	}
+}
+
+__device__ void swappArrays(int* x, int* y){
+	for(int i=0;i<100;i++){
+		x[i] = y[i];
 	}
 }
 
