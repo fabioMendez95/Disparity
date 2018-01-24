@@ -113,7 +113,7 @@ void Comparison::CompareDisparities(){
 
 	namedWindow("SMG");
 	imshow("SMG",disparity);
-	imwrite("disparity128.png",disparity);
+	imwrite("disparitybox2x2.png",disparity);
 	waitKey(0);
 
 	//free Memory
