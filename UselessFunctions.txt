@@ -613,3 +613,163 @@ __host__ int HammingDistance(unsigned int a, unsigned int b){
 	}
 	return dist;
 }
+
+
+
+//Useless Kernel Functions
+__device__ void PathCostKernelCols(int length, int directionX, int directionY, int* L, int* cost);
+__device__ void PathCostKernelRows(int width, int directionX, int directionY, int* L, int* cost);
+
+__global__ void callColsPathCost(int length, int directionX, int directionY, int* L, int* cost){
+	PathCostKernelCols(length,directionX,directionY,L,cost);
+}
+__global__ void callRowsPathCost(int width, int directionX, int directionY, int* L, int* cost){
+	PathCostKernelRows(width,directionX,directionY,L,cost);
+}
+//Kernel 2 Functions
+__device__ void PathCostKernelCols(int length, int directionX, int directionY, int* L, int* cost){
+	//To use this, blockNum Has to be width, and threadNum has to be disparity value
+	__shared__ int previousResults[100];
+	__shared__ int previousTemp[100];
+	__shared__ int minimum;
+	const int x = blockIdx.x;
+	const int d = threadIdx.x;
+	const int width = blockDim.x;
+	int startY = (directionY == -1)? length : 0;
+	int endY   = (directionY == -1)? 0 : length;
+
+	int influenceX = -1;
+	int influenceY = -1;
+	int term1 = 0;//Cost of the pixel, given disparity
+	int term2 = 0;//minimum path cost of previousPixel, with penalties.
+	int term3 = 0;//minimum path cost of previousPixel, without penalties.
+	int minToUse = 0;
+
+	#pragma unroll 374
+	for(int y = startY; y < endY; y++){
+		minimum = 8888;
+		term1 = cost[width*(y+d*(length))+x];
+		if(influenceX >= 0 && influenceY >= 0){
+			int currentD = previousResults[d];
+			int previousD = (d - 1 >= 0) ? previousResults[d - 1] : 8888;
+			int nextD = (d + 1 < maxDisparity) ? previousResults[d + 1] : 8888;
+			term2 = minNumber(currentD,nextD+p1,previousD+p1,minToUse+p2);
+			term3 = minToUse;
+		}
+		int valueToAssign = term1 + term2 - term3;
+		L[width*(y+d*(length))+x] = L[width*(y+d*(length))+x] +  valueToAssign;
+
+		if(valueToAssign < minimum){
+			minimum = valueToAssign;
+		}
+
+		influenceY = y;
+		minToUse = minimum;
+		__syncthreads();
+		swappArrays(previousResults,previousTemp);
+	}
+}
+
+__device__ void PathCostKernelRows(int width, int directionX, int directionY, int* L, int* cost){
+	//To use this, blockNum Has to be width, and threadNum has to be disparity value
+	__shared__ int previousResults[100];
+	__shared__ int previousTemp[100];
+	__shared__ int minimum;
+	const int y = blockIdx.x;
+	const int d = threadIdx.x;
+	const int length = blockDim.x;
+	int startX = (directionX == -1)? width : 0;
+	int endX   = (directionX == -1)? 0 : width;
+
+	int influenceX = -1;
+	int influenceY = -1;
+	int term1 = 0;//Cost of the pixel, given disparity
+	int term2 = 0;//minimum path cost of previousPixel, with penalties.
+	int term3 = 0;//minimum path cost of previousPixel, without penalties.
+	int minToUse = 0;
+
+	#pragma unroll 1237
+	for(int x = startX; y < endX; x++){
+		minimum = 8888;
+		term1 = cost[width*(y+d*(length))+x];
+		if(influenceX >= 0 && influenceY >= 0){
+			int currentD = previousResults[d];
+			int previousD = (d - 1 >= 0) ? previousResults[d - 1] : 8888;
+			int nextD = (d + 1 < maxDisparity) ? previousResults[d + 1] : 8888;
+			term2 = minNumber(currentD,nextD+p1,previousD+p1,minToUse+p2);
+			term3 = minToUse;
+		}
+		int valueToAssign = term1 + term2 - term3;
+		L[width*(y+d*(length))+x] = L[width*(y+d*(length))+x] +  valueToAssign;
+
+		if(valueToAssign < minimum){
+			minimum = valueToAssign;
+		}
+
+		influenceX = x;
+		minToUse = minimum;
+		__syncthreads();
+		swappArrays(previousResults,previousTemp);
+	}
+}
+
+
+__global__ void CensusAndCostKernel(int boxCostX, int boxCostY, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
+	//printf("Census \n");
+	CensusAndCostCalculationKernel(boxCostX,boxCostY,widthImage,lenImage,leftI,rightI,cost);
+	__syncthreads();
+}
+
+__device__ void CensusAndCostCalculationKernel(int widthBox, int lengthBox, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
+	int yLR = threadIdx.y + (blockIdx.y * blockDim.y);
+	int xL = (int)((threadIdx.x + (blockIdx.x * blockDim.x)) / 100);
+	int d = (threadIdx.x + (blockIdx.x * blockDim.x)) % 100;
+	int xR = xL - d;
+
+	int wI = widthImage + widthBox;
+	int x = xL + widthBox/2;
+	int y = yLR+ lengthBox/2;
+	unsigned int censusLCal = 0;
+	unsigned int censusRCal = 0;
+	unsigned int shiftCount=0;
+
+	int valueLeft = (int)leftI[y*wI+x];
+	int valueRight= (int)rightI[y*wI+x];
+
+	int valueToAssign = 8888;
+	if(xR >= 0){
+		//Census
+		for (int j = y - lengthBox / 2; j <= y + lengthBox / 2; j++) {
+			for (int i = x - widthBox / 2; i <= x + widthBox / 2; i++) {
+				int valueToCheckLeft = (int) leftI[j * wI + i];
+				int valueTocheckRight = (int) rightI[j * wI + i];
+				if (shiftCount != widthBox * lengthBox / 2) {
+					//Left Census
+					if (valueLeft < valueToCheckLeft) {
+						censusLCal <<= 1;
+						censusLCal = censusLCal + 1;
+					} else {
+						censusLCal <<= 1;
+					}
+					//Right Census
+					if (valueRight < valueTocheckRight) {
+						censusRCal <<= 1;
+						censusRCal = censusRCal + 1;
+					} else {
+						censusRCal <<= 1;
+					}
+				}
+			}
+		}
+		//Cost Computation
+		valueToAssign = HammingDistanceKernel(censusLCal,censusRCal);
+	}
+	printf("valueToAssign:%d %d %d \n",xL,yLR,valueToAssign);
+	cost[widthImage*(yLR+d*(lenImage))+xL] = valueToAssign;
+}
+
+__global__ void CensusAndCostKernel(int boxCostX, int boxCostY, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost);
+__device__ void CensusAndCostCalculationKernel(int widthBox, int lengthBox, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost);
+
+
+

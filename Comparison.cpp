@@ -15,8 +15,8 @@ void Comparison::CompareDisparities(){
 	int maxDisparity = 128;
 
 	//Reading Images
-	left = imread("Images/KITTY/left/0000000000.png", CV_LOAD_IMAGE_COLOR);
-	right= imread("Images/KITTY/right/0000000000.png", CV_LOAD_IMAGE_COLOR);
+	left = imread(/*"Images/Left.png"*/"Images/KITTY/left/0000000000.png", CV_LOAD_IMAGE_COLOR);
+	right= imread(/*"Images/Right.png"*/"Images/KITTY/right/0000000000.png", CV_LOAD_IMAGE_COLOR);
 
 	Mat leftBlack;
 	cvtColor( left, leftBlack, CV_BGR2GRAY );
@@ -46,6 +46,7 @@ void Comparison::CompareDisparities(){
 
 	namedWindow("disparitySimple");
 	imshow("disparitySimple",disparity2);
+	imwrite("SimpleDisparity.png",disparity2);
 	printf("Elapsed time Local Matching:\t\t\t%.6lf (s)\n", end - begin);
 	waitKey(0);
 	//---------------------------------------------------------------------------
@@ -113,7 +114,7 @@ void Comparison::CompareDisparities(){
 
 	namedWindow("SMG");
 	imshow("SMG",disparity);
-	imwrite("disparitybox2x2.png",disparity);
+	imwrite("SMG.png",disparity);
 	waitKey(0);
 
 	//free Memory

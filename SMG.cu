@@ -7,14 +7,16 @@
 #include "opencv2/core/core.hpp"
 #include <opencv2/imgproc/imgproc.hpp>
 #include "opencv2/highgui/highgui.hpp"
-#include <sl/Camera.hpp>
+
 
 #include<sys/resource.h>
-#include <time.h>
+#include<time.h>
 #include<sys/time.h>
+
 
 #include "Comparison.h"
 #include "Kernels.cuh"
+#include "ZedCamera.h"
 
 using namespace std;
 using namespace cv;
@@ -27,7 +29,7 @@ using namespace cv;
 #define WIDTHIMAGE 1280
 #define LENGTHIMAGE 720
 
-__host__ void SMG();
+__host__ void SGM();
 __host__ void AggregateCostCom(int* cost, int* L, int width, int length, int directionx, int directiony);
 __host__ int minBetweenNumbersInt(int a, int b, int c, int d);
 __host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4,/*int* L5, int* L6, int* L7, int* L8,*/ int width, int length);
@@ -53,11 +55,11 @@ int main (int argc, char** argv){
 	//comp.CompareDisparities();
 	//------------------------
 
-	SMG();
+	SGM();
 	return 0;
 }
 
-__host__ void SMG(){
+__host__ void SGM(){
 	struct timeval timstr;
 	Mat left, right;
 	Mat completeImage;
@@ -75,14 +77,27 @@ __host__ void SMG(){
 	//Maximum box value is depending on bytes used
 	int BoxCostX = 4;
 	int BoxCostY = 2;
-
+	ZedCamera zed;
 #if USECAMARA
-	VideoCapture stream(Camara);
-	for (int i =0; i<100;i++){
-		stream.read(completeImage);
+	zed.initCamera();
+
+	char key = ' ';
+	while(key != 'q'){
+		zed.grabImage();
+		left = zed.getLeftImage();
+		right = zed.getRightImage();
+		namedWindow("left");
+		namedWindow("right");
+		imshow("left", left);
+		imshow("right", right);
+		key = waitKey(10);
 	}
 
-	DivideImagesCam(completeImage,&right,&left);
+	namedWindow("left");
+	namedWindow("right");
+	imshow("left", left);
+	imshow("right", right);
+
 #else
 	//Reading Images
 	left = imread("Images/KITTY/left/0000000000.png", CV_LOAD_IMAGE_COLOR);
@@ -95,11 +110,9 @@ __host__ void SMG(){
 
 	//Initialisation Parameters---------------
 	//First Kernel Params
-	//Passing images to kernels----------------------------
+
 	imageLeftA = (uchar*)malloc((sizeof(uchar))*(left.cols)*(left.rows));
 	imageRightA= (uchar*)malloc((sizeof(uchar))*(right.cols)*(right.rows));
-
-	//Done passing images to kernels------------------------
 
 	int decreseX = BoxCostX/2 + BoxCostX/2;
 	int decreseY = BoxCostY/2 + BoxCostY/2;
@@ -119,7 +132,9 @@ __host__ void SMG(){
 	//Second Kernel Params
 	int widthR = left.cols-decreseX;
 	int lengthR = left.rows-decreseY;
-	int threadNum = 229; // pathNumber is divisible by this, 437 blocks
+	cout << "Disparity Size : " << widthR << " " << lengthR << endl;
+
+	int threadNum = 258; // pathNumber is divisible by this, 437 blocks
 	int pathNumber =/*(widthR+lengthR-1)*4 + */widthR *2 + lengthR*2;
 	dim3 dimGrid2(pathNumber/threadNum);
 	dim3 dimBlock2(threadNum);
@@ -138,12 +153,29 @@ __host__ void SMG(){
 	double begin = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 
 	//Converting Images
-	Mat leftBlack;
-	cvtColor( left, leftBlack, CV_BGR2GRAY );
+#if USECAMARA
+//	cout << zed.type2str(left.type()) << endl;
+/*	Mat leftBlack;
+	left.copyTo(leftBlack);
 	Mat rightBlack;
-	cvtColor( right, rightBlack, CV_BGR2GRAY );
+	right.copyTo(rightBlack);*/
+	namedWindow("leftB");
+	namedWindow("rightB");
+	//This line is wrong, not showing the correct image
+	imshow("leftB", left);
+	imshow("rightB", right);
+
+	imageLeftA = left.data;
+	imageRightA = right.data;
+#else
+	Mat leftBlack;
+	cvtColor(left, leftBlack, CV_BGR2GRAY);
+	Mat rightBlack;
+	cvtColor(right, rightBlack, CV_BGR2GRAY);
+	cout << zed.type2str(leftBlack.type()) << endl;
 	imageLeftA = leftBlack.data;
 	imageRightA= rightBlack.data;
+#endif
 	cudaMalloc(&leftC,(sizeof(uchar))*(left.cols)*(left.rows));
 	cudaMalloc(&rightC,(sizeof(uchar))*(left.cols)*(left.rows));
 	cudaMemcpy(leftC,imageLeftA,(sizeof(uchar))*(left.cols)*(left.rows),cudaMemcpyHostToDevice);
@@ -155,7 +187,7 @@ __host__ void SMG(){
 	double begin1 = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 	//CensusAndCostKernel<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,widthR,lengthR,leftC,rightC,costK); //Not running
 	KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,left.cols-decreseX,left.rows-decreseY,leftC,rightC,costK);
-	cout << "Synchronise status kernel 1: "<<cudaDeviceSynchronize() << endl;
+	cout << "Synchronise status kernel 1: "<<cudaDeviceSynchronize() << "\n";
 	//------------Done-First-Kernel-----------------------------
 	gettimeofday(&timstr, NULL);
 	double end1 = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
@@ -167,7 +199,7 @@ __host__ void SMG(){
 	//Second Kernel, Semi global matching and disparity Selection
 
 	KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1);
-	cout << "Synchronise status kernel 2: "<<cudaDeviceSynchronize() << endl;
+	cout << "Synchronise status kernel 2: "<<cudaDeviceSynchronize() << "\n";
 	//------------Done-Second-Kernel-----------------------------
 
 	gettimeofday(&timstr, NULL);
@@ -206,7 +238,12 @@ __host__ void SMG(){
 	cudaFree(initialInfoToKernel);
 	free(L1S);
 	free(initialInfo);
+
+#if USECAMARA
+	zed.closeCamera();
+#endif
 }
+
 
 __host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length){
 	pointCoo point;

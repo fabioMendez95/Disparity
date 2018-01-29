@@ -19,7 +19,6 @@ struct pointCoo{
 
 //Kernel 1 main
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI);
-__global__ void CensusAndCostKernel(int boxCostX, int boxCostY, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost);
 //Kernel 2 main
 __global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* workInfo, int* L1);
 
@@ -27,18 +26,13 @@ __global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* wo
 __device__ void CensusTransFormationKernel(int widthW, int lengthW, unsigned int* censusLa, unsigned int* censusRa,int widthImage, uchar* leftI, uchar* rightI);
 __device__ void CostComputationKernel(unsigned int* censusL, unsigned int* censusR, int* cost, int width, int length);
 __device__ int HammingDistanceKernel(unsigned int a, unsigned int b);
-__device__ void CensusAndCostCalculationKernel(int widthBox, int lengthBox, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost);
+
 
 //Kernel 2 functions
 __device__ void AggregateCostKernel(int* cost, int width, int lenght, startInfo info, int* L);
 __device__ int minNumber(int a, int b, int c, int d);
 __device__ void swappArrays(int* x, int* y);
 
-__global__ void CensusAndCostKernel(int boxCostX, int boxCostY, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
-	//printf("Census \n");
-	CensusAndCostCalculationKernel(boxCostX,boxCostY,widthImage,lenImage,leftI,rightI,cost);
-	__syncthreads();
-}
 
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
 	//Hardcode size of image so this can be done
@@ -54,15 +48,23 @@ __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned
 
 __global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* workInfo, int* L1){
 	int ID = blockIdx.x * blockDim.x + threadIdx.x;
+	//startInfo infoThread = workInfo[blockIdx.x];
 	startInfo infoThread = workInfo[ID];
 	AggregateCostKernel(cost,width,length,infoThread,L1);
 	__syncthreads();
 }
 
-//Kernel 2 Functions
-//TODO there is an out of bound in the array accessing, also check initial info
+
 __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo info, int* L){
 	//int ID = blockIdx.x * blockDim.x + threadIdx.x;
+	//int disparityWork = maxDisparity / blockDim.x;
+	int startD = 0;//threadIdx.x * disparityWork;
+	int endD   = maxDisparity;//startD + disparityWork;
+
+
+	/*if(blockIdx.x == 0){
+		printf("Distribution %d %d \n", startD, endD);
+	}*/
 
 	int previousResults[100];
 	int previousTemp[100];
@@ -80,7 +82,8 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 	while(!done){
 		int minimum = 8888;
 		if(influenceX < 0 || influenceY < 0){ //This line is different, less checks
-			for(int d=0; d<maxDisparity; d++){
+
+			for(int d=startD; d<endD; d++){
 				int costPixel = cost[width*(y+d*(length))+x];
 				L[width*(y+d*(length))+x] = L[width*(y+d*(length))+x] + costPixel;
 				previousResults[d] = costPixel;
@@ -90,7 +93,8 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 			}
 		}
 		else{
-			for(int d = 0; d<maxDisparity; d++){
+
+			for(int d = startD; d<endD; d++){
 				int costPixel = cost[width*(y+d*(length))+x];
 				int currentD = previousResults[d];
 				int previousD= (d-1>=0)? previousResults[d-1]: 8888;
@@ -139,54 +143,6 @@ __device__ int minNumber(int a, int b, int c, int d){
 	return min;
 }
 
-
-__device__ void CensusAndCostCalculationKernel(int widthBox, int lengthBox, int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
-	int yLR = threadIdx.y + (blockIdx.y * blockDim.y);
-	int xL = (int)((threadIdx.x + (blockIdx.x * blockDim.x)) / 100);
-	int xR = (threadIdx.x + (blockIdx.x * blockDim.x)) % 100;
-
-
-	int wI = widthImage + widthBox;
-	int x = xL + widthBox/2;
-	int y = yLR+ lengthBox/2;
-	unsigned int censusLCal = 0;
-	unsigned int censusRCal = 0;
-	unsigned int shiftCount=0;
-
-	int valueLeft = (int)leftI[y*wI+x];
-	int valueRight= (int)rightI[y*wI+x];
-
-	int valueToAssign = 8888;
-	if(xR >= 0){
-		//Census
-		for (int j = y - lengthBox / 2; j <= y + lengthBox / 2; j++) {
-			for (int i = x - widthBox / 2; i <= x + widthBox / 2; i++) {
-				int valueToCheckLeft = (int) leftI[j * wI + i];
-				int valueTocheckRight = (int) rightI[j * wI + i];
-				if (shiftCount != widthBox * lengthBox / 2) {
-					//Left Census
-					if (valueLeft < valueToCheckLeft) {
-						censusLCal <<= 1;
-						censusLCal = censusLCal + 1;
-					} else {
-						censusLCal <<= 1;
-					}
-					//Right Census
-					if (valueRight < valueTocheckRight) {
-						censusRCal <<= 1;
-						censusRCal = censusRCal + 1;
-					} else {
-						censusRCal <<= 1;
-					}
-				}
-			}
-		}
-		//Cost Computation
-		valueToAssign = HammingDistanceKernel(censusLCal,censusRCal);
-	}
-	printf("valueToAssign:%d %d %d \n",xL,yLR,valueToAssign);
-	cost[widthImage*(yLR+d*(lenImage))+xL] = valueToAssign;
-}
 
 
 //Kernel 1 functions
