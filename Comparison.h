@@ -2,7 +2,6 @@
 #include <iostream>
 #include <string.h>
 #include <limits>
-#include "ReadRadar.h"
 
 #include "opencv2/core/core.hpp"
 #include <opencv2/imgproc/imgproc.hpp>
@@ -31,5 +30,7 @@ private:
 	void CensusTransformation (Mat image, int widthW, int lengthW, unsigned int* censusArray);
 	void CostComputationCensus (unsigned int* censusL, unsigned int* censusR, int* cost, int maxDisparity, int width, int length);
 	int HammingDistanceNumbers (unsigned int a, unsigned int b);
+
+
 
 };

@@ -2,7 +2,6 @@
 #include <iostream>
 #include <string.h>
 #include <limits>
-//#include "ReadRadar.h"
 
 #include "opencv2/core/core.hpp"
 #include <opencv2/imgproc/imgproc.hpp>
@@ -17,6 +16,7 @@
 #include "Comparison.h"
 #include "Kernels.cuh"
 #include "ZedCamera.h"
+#include "Radar.h"
 
 using namespace std;
 using namespace cv;
@@ -43,17 +43,14 @@ __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, in
 //sl::Camera zed;
 
 int main (int argc, char** argv){
-	//Initialising Radar
-	//ReadRadar radar;
-	//radar.Connect();
-	//radar.Read();
-	//Initialising Radar
-
-
 	//Comparison Calculations
 	//Comparison comp;
 	//comp.CompareDisparities();
 	//------------------------
+
+	//Radar info
+	Radar radar;
+	radar.test();
 
 	SGM();
 	return 0;
