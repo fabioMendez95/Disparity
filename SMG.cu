@@ -50,9 +50,15 @@ int main (int argc, char** argv){
 
 	//Radar info
 	Radar radar;
-	radar.test();
+	int samples = 100;
+	while(samples > 0){
+		radar.test();
+		waitKey(100);
+		samples = samples - 1;
+	}
 
-	SGM();
+
+	//SGM();
 	return 0;
 }
 
@@ -221,8 +227,8 @@ __host__ void SGM(){
 
 	namedWindow("SMG");
 	imshow("SMG",disparity);
-	//imwrite("disparity.png",disparity);
-	waitKey(0);
+	//imwrite("disparit.png",disparity);
+	waitKey();
 	//Loop should end here-------------------------------------------------------------------------------------------
 
 	//free Memory
@@ -235,6 +241,9 @@ __host__ void SGM(){
 	cudaFree(initialInfoToKernel);
 	free(L1S);
 	free(initialInfo);
+	free(imageLeftA);
+	free(imageRightA);
+
 
 #if USECAMARA
 	zed.closeCamera();

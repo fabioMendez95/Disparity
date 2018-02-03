@@ -8,5 +8,6 @@
 class Radar{
 public:
 	void test();
+	void writePipe();
 private:
 };
