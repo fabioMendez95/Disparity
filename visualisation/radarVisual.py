@@ -5,13 +5,13 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import math
 
 class visualRadar:
     path = "/tmp/FIFO"
     plt.ion()
     fig = plt.figure()
     ax = fig.add_subplot(111)
-
 
     def readPipe(self): 
         fifo = open(self.path,'r')
@@ -28,7 +28,9 @@ class visualRadar:
         for pointPoss in range(0,pointNum):
             splitInfo = pointsStr[pointPoss].split(' ')
             pointArray[pointPoss,0] = float(splitInfo[0])
+            #np.arctan(float(splitInfo[1])/float(splitInfo[0]))
             pointArray[pointPoss,1] = float(splitInfo[1])
+            #math.sqrt(float(splitInfo[1])*float(splitInfo[1]) + float(splitInfo[0])*float(splitInfo[0]))
 
         return pointArray
 
@@ -48,7 +50,7 @@ class visualRadar:
                 print infoPoints
                 self.plotPoints(infoPoints)
             except:
-                time.sleep(0.3)#Needs to be smaller than the sampling rate of the Radar for better visualisation     
+                time.sleep(0.2)#Needs to be smaller than the sampling rate of the Radar for better visualisation     
                 continue
 
 radar = visualRadar()

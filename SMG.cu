@@ -51,11 +51,16 @@ int main (int argc, char** argv){
 	//Radar info
 	Radar radar;
 	int samples = 100;
+	radar.startRadar();
 	while(samples > 0){
-		radar.test();
-		waitKey(100);
+		bool correctlyRead = radar.readInfo();
+		while(correctlyRead == 0){
+			bool correctlyRead = radar.readInfo();
+		}
+		waitKey(50);
 		samples = samples - 1;
 	}
+	radar.closeRadar();
 
 
 	//SGM();
