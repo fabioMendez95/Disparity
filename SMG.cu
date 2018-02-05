@@ -25,6 +25,8 @@ using namespace cv;
 #define threadx 16
 #define thready 16
 
+#define SAVEIMAGE false
+
 #define USECAMARA false
 #define Camara 1
 #define WIDTHIMAGE 1280
@@ -73,6 +75,7 @@ __host__ void SGM(){
 	int frame = 0;
 
 	struct timeval timstr;
+	struct timeval timstrTotal;
 	Mat left, right;
 	Mat completeImage;
 	//Texture Creation
@@ -141,7 +144,7 @@ __host__ void SGM(){
 	int lengthR = left.rows-decreseY;
 	cout << "Disparity Size : " << widthR << " " << lengthR << endl;
 
-	int threadNum = 258; // pathNumber is divisible by this, 437 blocks
+	int threadNum = 458; // pathNumber is divisible by this, 437 blocks
 	int pathNumber =/*(widthR+lengthR-1)*4 + */widthR *2 + lengthR*2;
 	dim3 dimGrid2(pathNumber/threadNum);
 	dim3 dimBlock2(threadNum);
@@ -153,22 +156,31 @@ __host__ void SGM(){
 	int* L1S = (int*) malloc((sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity + 1));
 	//Done Initialisation Parameters----------
 
+
+
+
+
+	startInfo* initialInfo, *initialInfoToKernel;
+	initialInfo = (startInfo*) malloc((sizeof(startInfo)) * pathNumber);
+	getKernelInitialInformation(pathNumber, initialInfo, widthR, lengthR);
+	cudaMalloc(&initialInfoToKernel, (sizeof(startInfo)) * pathNumber);
+	cudaMemcpy(initialInfoToKernel, initialInfo, (sizeof(startInfo)) * pathNumber, cudaMemcpyHostToDevice);
+	cudaMalloc(&leftC, (sizeof(uchar)) * (left.cols) * (left.rows));
+	cudaMalloc(&rightC, (sizeof(uchar)) * (left.cols) * (left.rows));
+	cudaMalloc(&censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
+	cudaMalloc(&censusRa,(sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
+	cout << "CUDA malloc 1: "<<cudaMalloc(&costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1)) << endl;
+
+	//Timing Total
+	gettimeofday(&timstrTotal, NULL);
+	double beginTotal = timstrTotal.tv_sec + (timstrTotal.tv_usec / 1000000.0);
+
 	//--------------------------------------------------------------------------------------------------
 	//----------------------------Main Loop-------------------------------------------------------------
 	//--------------------------------------------------------------------------------------------------
 	while (frame < frameNumber || USECAMARA) {
 		int* L1;
 		cout <<"CUDA malloc " <<cudaMalloc(&L1,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
-		cout << "CUDA malloc 1: "<<cudaMalloc(&costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1)) << endl;
-		cudaMalloc(&censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
-		cudaMalloc(&censusRa,(sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
-
-
-		startInfo* initialInfo, *initialInfoToKernel;
-		initialInfo = (startInfo*) malloc((sizeof(startInfo)) * pathNumber);
-		getKernelInitialInformation(pathNumber, initialInfo, widthR, lengthR);
-		cudaMalloc(&initialInfoToKernel, (sizeof(startInfo)) * pathNumber);
-		cudaMemcpy(initialInfoToKernel, initialInfo, (sizeof(startInfo)) * pathNumber, cudaMemcpyHostToDevice);
 
 #if USECAMARA
 		zed.grabImage();
@@ -185,12 +197,6 @@ __host__ void SGM(){
 			cout << "Stoped at frame " << frame << endl;
 			break;
 		}
-
-		namedWindow("left");
-		namedWindow("right");
-		imshow("left", left);
-		imshow("right", right);
-		cout << " here frame" << frame << endl;
 
 		//Converting Images
 #if USECAMARA
@@ -214,8 +220,7 @@ __host__ void SGM(){
 		imageLeftA = leftBlack.data;
 		imageRightA = rightBlack.data;
 #endif
-		cudaMalloc(&leftC, (sizeof(uchar)) * (left.cols) * (left.rows));
-		cudaMalloc(&rightC, (sizeof(uchar)) * (left.cols) * (left.rows));
+
 		cudaMemcpy(leftC, imageLeftA, (sizeof(uchar)) * (left.cols) * (left.rows),cudaMemcpyHostToDevice);
 		cudaMemcpy(rightC, imageRightA,(sizeof(uchar)) * (left.cols) * (left.rows),cudaMemcpyHostToDevice);
 		//Done COnverting Images
@@ -263,28 +268,33 @@ __host__ void SGM(){
 		disparity.convertTo(display, CV_8UC3, 255 / (maxVal - minVal), -minVal);
 		applyColorMap(display,display,COLORMAP_JET);
 		imshow("SMG", display);
-		//imwrite("disparit.png",disparity);
+
+#if SAVEIMAGE
+		ostringstream imageSaveLocation;
+		imageSaveLocation << "Results/"<<frame << ".png";
+		imwrite(imageSaveLocation.str(),left);
+#endif
 		frame ++;
 
-		/*cudaFree(leftC);
-		cudaFree(rightC);
-		cudaFree(censusLa);
-		cudaFree(censusRa);
-		cudaFree(costK);
+
 		cudaFree(L1);
-		cudaFree(initialInfoToKernel);*/
-		free(initialInfo);
-		cudaDeviceReset();
 	}
 	//--------------------------------------------------------------------------------------------------
 	//----------------------------Main Loop-------------------------------------------------------------
 	//--------------------------------------------------------------------------------------------------
 
+	gettimeofday(&timstrTotal, NULL);
+	double endTotal = timstrTotal.tv_sec + (timstrTotal.tv_usec / 1000000.0);
+	printf("\n\nElapsed time:\t\t\t%.6lf (s)\n", endTotal - beginTotal);
+	printf("Frames Analysed:\t\t%d frames\n",frame);
+	printf("Frames per second:\t\t%f \n",frame/(endTotal-beginTotal));
+
+	free(initialInfo);
 	//free Memory
 	free(L1S);
 	//free(imageLeftA);
 	//free(imageRightA);
-
+	cudaDeviceReset();
 
 #if USECAMARA
 	zed.closeCamera();
