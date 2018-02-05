@@ -13,8 +13,8 @@ struct pointCoo{
 	int x,y;
 };
 
-#define p1 1
-#define p2 100
+#define p1 10
+#define p2 150
 #define maxDisparity 100
 
 //Kernel 1 main

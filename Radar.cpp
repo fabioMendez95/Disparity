@@ -168,11 +168,13 @@ int Radar::readInfo(){
 	//Reading detected objects Range, doppler, peak, x,y,z each 2 bytes
 
 	//data to be send ---------------
+#if VISUAL
 	mkfifo(myfifo, 0666);
 	fdf = open(myfifo, O_WRONLY);
 
 	stringstream stream;
 	stream << detectedObjects;
+#endif
 	cout << "Number Num: " << detectedObjects << " ";
 	for (int obj = 0; obj < detectedObjects; obj++) {
 		cout << "Byte: " << byteToReadB << " ";
@@ -234,17 +236,19 @@ int Radar::readInfo(){
 		cout << "Coordinates: " << xCoo << " " << yCoo << " "
 				<< (float) (z / Descriptor2) << endl;
 		byteToReadB = byteToReadB + 12;
+#if VISUAL
 		stream << "\n";
 		stream << fixed << setprecision(4) << xCoo;
 		stream << " ";
 		stream << fixed << setprecision(4) << yCoo;
+#endif
 	}
-
+#if VISUAL
 	string SendInfo = stream.str();
 	write(fdf, SendInfo.c_str(), SendInfo.length());
 	close(fdf);
 	unlink(myfifo);
-
+#endif
 	cout << "done Passing info \n";
 	return 1;
 }
