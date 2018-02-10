@@ -20,7 +20,7 @@ struct pointCoo{
 #define maxDisparity 100
 
 //Kernel 1 main
-__global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI);
+__global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* L, int* image);
 //Kernel 2 main
 __global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* workInfo, int* L1);
 
@@ -28,7 +28,7 @@ __global__ void KernelSemiGlobal(int* cost, int width, int length, startInfo* wo
 __device__ void CensusTransFormationKernel(int widthW, int lengthW, unsigned int* censusLa, unsigned int* censusRa,int widthImage, uchar* leftI, uchar* rightI);
 __device__ void CostComputationKernel(unsigned int* censusL, unsigned int* censusR, int* cost, int width, int length);
 __device__ int HammingDistanceKernel(unsigned int a, unsigned int b);
-
+__device__ void CostComputationKernelAndDisparitySelection(unsigned int* censusL, unsigned int* censusR, int* cost, int width, int length, int* L, int* image);
 
 //Kernel 2 functions
 __device__ void AggregateCostKernel(int* cost, int width, int lenght, startInfo info, int* L);
@@ -36,13 +36,14 @@ __device__ int minNumber(int a, int b, int c, int d);
 __device__ void swappArrays(int* x, int* y);
 
 
-__global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost){
+__global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* cost, int* L, int* image){
 	//Hardcode size of image so this can be done
 	//__shared__ unsigned int* censusLa[widthImage*lenImage];
 	//__shared__ unsigned int* censusRa[widthImage*lenImage];
 	CensusTransFormationKernel(boxCostX,boxCostY,censusLa,censusRa,widthImage,leftI,rightI);
 	__syncthreads();
-	CostComputationKernel(censusLa,censusRa,cost,widthImage,lenImage);
+	//CostComputationKernel(censusLa,censusRa,cost,widthImage,lenImage);
+	CostComputationKernelAndDisparitySelection(censusLa,censusRa,cost,widthImage,lenImage,L,image);
 	__syncthreads();
 
 	//censusAndCostKernel(boxCostX, boxCostY, widthImage, lenImage, leftI, rightI, cost, censusRa);
@@ -68,8 +69,8 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 		printf("Distribution %d %d \n", startD, endD);
 	}*/
 
-	int previousResults[100];
-	int previousTemp[100];
+	int previousResults[maxDisparity];
+	int previousTemp[maxDisparity];
 
 	int x = info.startX;
 	int y = info.startY;
@@ -164,6 +165,42 @@ __device__ void CostComputationKernel(unsigned int* censusL, unsigned int* censu
 		cost[width*(y+dis*(length))+xl] = valueToAssigned;
 	}
 }
+
+__device__ void CostComputationKernelAndDisparitySelection(unsigned int* censusL, unsigned int* censusR, int* cost, int width, int length, int* L, int* image){
+	int y = threadIdx.y + (blockIdx.y * blockDim.y);
+	int xl = threadIdx.x + (blockIdx.x * blockDim.x);
+	int start = (xl - maxDisparity) + 1;
+	unsigned valueLeft = censusL[y*width+xl];
+
+	int blockId = blockIdx.x + blockIdx.y * gridDim.x;
+	int threadId = blockId * (blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;
+
+	int minimum = 99999;
+	int disToAssign = 0;
+	for(int xr = start; xr<=xl;xr++){
+		int valueToAssigned = 99999;
+		int dis = xl - xr;
+		if (xr >= 0) {
+			/*if (threadId == 0) {
+				printf("\n disparity: %d \n\n", dis);
+			}*/
+
+			unsigned int valueRight = censusR[y * width + xr];
+			valueToAssigned = HammingDistanceKernel(valueLeft, valueRight);
+
+			//Disparity Selection
+			int value = L[width*(y+dis*(length))+xl];
+			L[width*(y+dis*(length))+xl] = 0;
+			if (value < minimum) {
+				minimum = value;
+				disToAssign = dis;
+			}
+		}
+		cost[width*(y+dis*(length))+xl] = valueToAssigned;
+	}
+	image[width*y+xl] = disToAssign;
+}
+
 
 
 

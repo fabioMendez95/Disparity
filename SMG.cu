@@ -41,6 +41,7 @@ __host__ void SGM();
 __host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4,/*int* L5, int* L6, int* L7, int* L8,*/ int width, int length);
 __host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
 __host__ Mat DisparitySelectionOneArray(int*L, int width, int length);
+__host__ Mat DisparityCreation(int* imageFromKernel, int width, int len);
 
 __host__ String numberOfZeros(int number);
 __host__ String getImageLocation(int frame, String side);
@@ -163,7 +164,7 @@ __host__ void SGM(){
 	//Setting Up initial Info, this is done just once in the algorithm.
 
 
-	int* L1S = (int*) malloc((sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity + 1));
+	int* L1S = (int*) malloc((sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity));
 	//Done Initialisation Parameters----------
 
 
@@ -176,13 +177,24 @@ __host__ void SGM(){
 	cudaMalloc(&rightC, (sizeof(uchar)) * (left.cols) * (left.rows));
 	cudaMalloc(&censusLa,(sizeof(unsigned int))*(left.cols-decreseX)*(left.rows-decreseY));
 	cudaMalloc(&censusRa,(sizeof(unsigned int))*(right.cols-decreseX)*(right.rows-decreseY));
-	cout << "CUDA malloc 1: "<<cudaMalloc(&costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity+1)) << endl;
+	cout << "CUDA malloc 1: "<<cudaMalloc(&costK,(sizeof(int))*(left.cols-decreseX)*(left.rows-decreseY)*(maxDisparity)) << endl;
 
+	int* disKernel;
+	int* disFromKernel = (int*) malloc((sizeof(int)) * (widthR) * (lengthR));
+	int errorCUDAMALLOCdis = cudaMalloc(&disKernel,(sizeof(int)*(widthR)*(lengthR)));
+	cout << "Error malloc dis: " << errorCUDAMALLOCdis << endl;
 	//Timing Total
 	gettimeofday(&timstrTotal, NULL);
 	double beginTotal = timstrTotal.tv_sec + (timstrTotal.tv_usec / 1000000.0);
 
-	cout << "Starting main loop \n";
+
+	int* L1;
+	int errorCUDAMALLOC1 = cudaMalloc(&L1,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity)));
+#if Profile
+	cout <<"CUDA malloc " << errorCUDAMALLOC1 <<endl;
+#endif
+
+	cout << "\n\nStarting main loop \n";
 	//--------------------------------------------------------------------------------------------------
 	//----------------------------Main Loop-------------------------------------------------------------
 	//--------------------------------------------------------------------------------------------------
@@ -192,12 +204,6 @@ __host__ void SGM(){
 			cout << "Stoped at frame " << frame << endl;
 			break;
 		}
-
-		int* L1;
-		int errorCUDAMALLOC1 = cudaMalloc(&L1,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)));
-#if Profile
-		cout <<"CUDA malloc " << errorCUDAMALLOC1 <<endl;
-#endif
 		//Read Image---------------------------------------
 #if USECAMARA
 		zed.grabImage();
@@ -236,11 +242,11 @@ __host__ void SGM(){
 		//Done converting images---------------------------
 #endif
 		//------------First kernel cost Computation----------------------
-		KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,widthR,lengthR,leftC,rightC,costK);
+		KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,widthR,lengthR,leftC,rightC,costK,L1,disKernel); //Old copy L1
 		//------------Done-First-Kernel-----------------------------
 
 		//Second Kernel, Semi global matching and disparity Selection---------
-		KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1);
+		KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1); //new Copy L1
 		//----> Radar point fetch should be done here <---- TODO
 #if USERADAR
 		bool correctlyRead = radar.readInfo();
@@ -260,7 +266,8 @@ __host__ void SGM(){
 		//----> Junction of information should be done here <---- TODO
 
 
-		int errorMemCpy3 = cudaMemcpy(L1S, L1,(sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity + 1), cudaMemcpyDeviceToHost);
+		//int errorMemCpy3 = cudaMemcpy(L1S, L1,(sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity + 1), cudaMemcpyDeviceToHost);
+		int errorMemCpy3 = cudaMemcpy(disFromKernel, disKernel,(sizeof(int)) * (widthR) * (lengthR), cudaMemcpyDeviceToHost);
 #if Profile
 		cout<< "Cuda copy3: " << errorMemCpy3 << endl;
 		cout << "Path Number " << pathNumber << endl;
@@ -273,8 +280,9 @@ __host__ void SGM(){
 		printf("Elapsed time Disparity:\t\t\t%.6lf (s)\n", end1 - begin);
 #endif
 		//Disparity Selection--------------------------------------------------------------------------------------------
-		Mat disparity = DisparitySelectionOneArray(L1S, widthR, lengthR);
-
+		//Mat disparity = DisparitySelectionOneArray(L1S, widthR, lengthR);
+		//Mat disparity(lengthR,widthR,CV_8U,disFromKernel);
+		Mat disparity = DisparityCreation(disFromKernel,widthR,lengthR);
 		//---------------------------------------------------------------------------------------------------------------
 #if Profile
 		gettimeofday(&timstr, NULL);
@@ -299,7 +307,6 @@ __host__ void SGM(){
 #endif
 
 		frame ++;
-		cudaFree(L1);
 	}
 	//--------------------------------------------------------------------------------------------------
 	//----------------------------Main Loop-------------------------------------------------------------
@@ -320,6 +327,7 @@ __host__ void SGM(){
 #if USECAMARA
 	zed.closeCamera();
 #endif
+	free(disFromKernel);
 	free(initialInfo);
 	free(L1S);
 	cudaDeviceReset();
@@ -437,7 +445,16 @@ __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, in
 	}
 }
 
+__host__ Mat DisparityCreation(int* imageFromKernel, int width, int len){
+	Mat disparity(len,width,CV_8U);
+	for(int y=0; y<len; y++){
+		for(int x=0; x<width; x++){
+			disparity.at<uchar>(y,x) = imageFromKernel[y*width+x];
+		}
+	}
 
+	return disparity;
+}
 //Disparity Selection Process
 __host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4/*,int* L5, int* L6, int* L7, int* L8*/, int width, int length){
 	Mat disparity(length,width,CV_8U);
@@ -450,10 +467,6 @@ __host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4/*,int* L5, i
 				int sumAgg = L1[width*(y+d*length)+x] + L2[width*(y+d*(length))+x]+
 						L3[width*(y+d*length)+x] + L4[width*(y+d*(length))+x] /*+ L5[width*(y+d*(length))+x]+
 						L6[width*(y+d*length)+x] + L7[width*(y+d*(length))+x] + L8[width*(y+d*length)+x]*/;
-				if(x == 100 && y == 369 && d == 99){
-					cout << x << " " << y<< " : "<<L1[width*(y+d*length)+x] << endl;
-					cout << width << " " << length << endl;
-				}
 				if (sumAgg < costA){
 					costA = sumAgg;
 					disPix = d;
