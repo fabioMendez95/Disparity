@@ -3,14 +3,16 @@ using namespace cv;
 using namespace std;
 
 void ZedCamera::initCamera(){
-	initParameters.camera_resolution = sl::RESOLUTION_HD720;
-	initParameters.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
-	initParameters.coordinate_units = sl::UNIT_METER;
-
-	runtime_parameters.sensing_mode = sl::SENSING_MODE_STANDARD;
+	initParameters.camera_resolution = sl::RESOLUTION_VGA;
+	initParameters.camera_fps = 10;
+	initParameters.camera_buffer_count_linux = 0;
+	//initParameters.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
+	//initParameters.coordinate_units = sl::UNIT_METER;
+	//runtime_parameters.sensing_mode = sl::SENSING_MODE_STANDARD;
 
 	zed.open(initParameters);
 	imageSize = zed.getResolution();
+	//This might be the problem
 	new_width = imageSize.width/2;
 	new_height = imageSize.height/2;
 }
@@ -19,7 +21,12 @@ void ZedCamera::grabImage(){
 	sl::Mat	image_zedLeft(new_width,new_height,sl::MAT_TYPE_8U_C4);
 	sl::Mat image_zedRight(new_width,new_height,sl::MAT_TYPE_8U_C4);
 
-	zed.grab(runtime_parameters);
+	int errorGrab = zed.grab(runtime_parameters);
+	//cout << "ZED grab: "<<errorGrab << endl;
+	if(errorGrab > 0){
+		cout << "Error Camera \n";
+		sleep(5);
+	}
 	zed.retrieveImage(image_zedLeft, sl::VIEW_LEFT_GRAY, sl::MEM_CPU, new_width, new_height);
 	zed.retrieveImage(image_zedRight, sl::VIEW_RIGHT_GRAY, sl::MEM_CPU, new_width, new_height);
 	left = slMat2cvMat(image_zedLeft);

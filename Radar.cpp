@@ -85,9 +85,6 @@ int Radar::readInfo(){
 	int bytes_read = 0; /* Number of bytes read by the read() system call */
 
 	bytes_read = read(fd, &read_buffer, sizeof(read_buffer));
-	if(bytes_read < 128){ //minimum number of the packet
-		return 0;
-	}
 	/*printf("\n\n +----------------------------------+");
 	printf("\n\nTotal bytes: %d", bytes_read);  Print the number of bytes read
 	printf("\n\n");*/

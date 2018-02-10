@@ -25,9 +25,14 @@ using namespace cv;
 #define threadx 16
 #define thready 16
 
+#define USERADAR false
+
 #define SAVEIMAGE false
+#define Profile true
+
 
 #define USECAMARA false
+#define Paths8 false
 #define Camara 1
 #define WIDTHIMAGE 1280
 #define LENGTHIMAGE 720
@@ -73,7 +78,14 @@ int main (int argc, char** argv){
 __host__ void SGM(){
 	int frameNumber = 30;
 	int frame = 0;
+	Size size(720,400);
+	cout << "Starting process \n";
 
+	//Radar Info
+#if USERADAR
+	Radar radar;
+	radar.startRadar();
+#endif
 	struct timeval timstr;
 	struct timeval timstrTotal;
 	Mat left, right;
@@ -92,28 +104,14 @@ __host__ void SGM(){
 	//Maximum box value is depending on bytes used
 	int BoxCostX = 9;
 	int BoxCostY = 7;
+
+	cout <<"Initialising camera\n";
 	ZedCamera zed;
 #if USECAMARA
 	zed.initCamera();
 	zed.grabImage();
 	left = zed.getLeftImage();
 	right = zed.getRightImage();
-	/*char key = ' ';
-	while(key != 'q'){
-		zed.grabImage();
-		left = zed.getLeftImage();
-		right = zed.getRightImage();
-		namedWindow("left");
-		namedWindow("right");
-		imshow("left", left);
-		imshow("right", right);
-		key = waitKey(10);
-	}
-
-	namedWindow("left");
-	namedWindow("right");
-	imshow("left", left);
-	imshow("right", right);*/
 
 #else
 	//Reading Images
@@ -121,6 +119,7 @@ __host__ void SGM(){
 	right= imread("Images/KITTY/right/0000000000.png", CV_LOAD_IMAGE_COLOR);
 #endif
 
+	cout << "Camera ready \n";
 	//Initialisation Parameters---------------
 	//First Kernel Params
 	imageLeftA = (uchar*)malloc((sizeof(uchar))*(left.cols)*(left.rows));
@@ -144,8 +143,19 @@ __host__ void SGM(){
 	int lengthR = left.rows-decreseY;
 	cout << "Disparity Size : " << widthR << " " << lengthR << endl;
 
+#if USECAMARA && Paths8
+	int threadNum = 382;
+#elif USECAMARA
+	int threadNum = 255;
+#else
 	int threadNum = 458; // pathNumber is divisible by this, 437 blocks
-	int pathNumber =/*(widthR+lengthR-1)*4 + */widthR *2 + lengthR*2;
+#endif
+
+#if Paths8
+	int pathNumber =(widthR+lengthR-1)*4 + widthR *2 + lengthR*2;
+#else
+	int pathNumber = widthR *2 + lengthR*2;
+#endif
 	dim3 dimGrid2(pathNumber/threadNum);
 	dim3 dimBlock2(threadNum);
 	//Assigning Paths
@@ -155,9 +165,6 @@ __host__ void SGM(){
 
 	int* L1S = (int*) malloc((sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity + 1));
 	//Done Initialisation Parameters----------
-
-
-
 
 
 	startInfo* initialInfo, *initialInfoToKernel;
@@ -175,13 +182,23 @@ __host__ void SGM(){
 	gettimeofday(&timstrTotal, NULL);
 	double beginTotal = timstrTotal.tv_sec + (timstrTotal.tv_usec / 1000000.0);
 
+	cout << "Starting main loop \n";
 	//--------------------------------------------------------------------------------------------------
 	//----------------------------Main Loop-------------------------------------------------------------
 	//--------------------------------------------------------------------------------------------------
 	while (frame < frameNumber || USECAMARA) {
-		int* L1;
-		cout <<"CUDA malloc " <<cudaMalloc(&L1,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)))<<endl;
+		//Stop Condition
+		if (waitKey(1) >= 1) {
+			cout << "Stoped at frame " << frame << endl;
+			break;
+		}
 
+		int* L1;
+		int errorCUDAMALLOC1 = cudaMalloc(&L1,(sizeof(int)*(widthR)*(lengthR)*(maxDisparity+1)));
+#if Profile
+		cout <<"CUDA malloc " << errorCUDAMALLOC1 <<endl;
+#endif
+		//Read Image---------------------------------------
 #if USECAMARA
 		zed.grabImage();
 		left = zed.getLeftImage();
@@ -190,28 +207,19 @@ __host__ void SGM(){
 		left = imread(getImageLocation(frame,"left"), CV_LOAD_IMAGE_COLOR);
 		right= imread(getImageLocation(frame,"right"), CV_LOAD_IMAGE_COLOR);
 #endif
+		//Done Read Image----------------------------------
+
+#if Profile
 		//Timing
 		gettimeofday(&timstr, NULL);
 		double begin = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
-		if (waitKey(1) >= 1) {
-			cout << "Stoped at frame " << frame << endl;
-			break;
-		}
-
-		//Converting Images
+#endif
+		//Converting Images--------------------------------
 #if USECAMARA
-		Mat leftBlack;
-		left.copyTo(leftBlack);
-		Mat rightBlack;
-		right.copyTo(rightBlack);
-		namedWindow("leftB");
-		namedWindow("rightB");
-		//This line is wrong, not showing the correct image
-		imshow("leftB", left);
-		imshow("rightB", right);
-
 		imageLeftA = left.data;
 		imageRightA = right.data;
+		namedWindow("left");
+		imshow("left",left);
 #else
 		Mat leftBlack;
 		cvtColor(left, leftBlack, CV_BGR2GRAY);
@@ -220,63 +228,77 @@ __host__ void SGM(){
 		imageLeftA = leftBlack.data;
 		imageRightA = rightBlack.data;
 #endif
-
-		cudaMemcpy(leftC, imageLeftA, (sizeof(uchar)) * (left.cols) * (left.rows),cudaMemcpyHostToDevice);
-		cudaMemcpy(rightC, imageRightA,(sizeof(uchar)) * (left.cols) * (left.rows),cudaMemcpyHostToDevice);
-		//Done COnverting Images
-
-		gettimeofday(&timstr, NULL);
-		double begin1 = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
-		//CensusAndCostKernel<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,widthR,lengthR,leftC,rightC,costK); //Not running
-		KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,left.cols-decreseX,left.rows-decreseY,leftC,rightC,costK);
-		cout << "Synchronise status kernel 1: " << cudaDeviceSynchronize()<< "\n";
+		int errorMemCpy1 = cudaMemcpy(leftC, imageLeftA, (sizeof(uchar)) * (left.cols) * (left.rows),cudaMemcpyHostToDevice);
+		int errorMemCpy2 = cudaMemcpy(rightC, imageRightA,(sizeof(uchar)) * (left.cols) * (left.rows),cudaMemcpyHostToDevice);
+#if Profile
+		cout<< "Cuda copy1: " << errorMemCpy1 << endl;
+		cout<< "Cuda copy2: " << errorMemCpy2 << endl;
+		//Done converting images---------------------------
+#endif
+		//------------First kernel cost Computation----------------------
+		KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,widthR,lengthR,leftC,rightC,costK);
 		//------------Done-First-Kernel-----------------------------
+
+		//Second Kernel, Semi global matching and disparity Selection---------
+		KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1);
+		//----> Radar point fetch should be done here <---- TODO
+#if USERADAR
+		bool correctlyRead = radar.readInfo();
+		while (correctlyRead == 0) {
+			bool correctlyRead = radar.readInfo();
+		}
+#endif
+		//-----------------------------------------------------
+		int syncStatus = cudaDeviceSynchronize();
+#if Profile
+		if(syncStatus > 0){
+			cout << "Error Kernel synchronise \t\tError type: " << syncStatus << "\n";
+			cout << cudaGetErrorString(cudaGetLastError()) << endl;
+		}
+#endif
+		//------------Done-Second-Kernel-----------------------------
+		//----> Junction of information should be done here <---- TODO
+
+
+		int errorMemCpy3 = cudaMemcpy(L1S, L1,(sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity + 1), cudaMemcpyDeviceToHost);
+#if Profile
+		cout<< "Cuda copy3: " << errorMemCpy3 << endl;
+		cout << "Path Number " << pathNumber << endl;
+#endif
+
+
+#if Profile
 		gettimeofday(&timstr, NULL);
 		double end1 = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
-		printf("Elapsed time Census and Cost:\t\t\t%.6lf (s)\n", end1 - begin1);
-
-		gettimeofday(&timstr, NULL);
-		double begin2 = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
-		//Second Kernel, Semi global matching and disparity Selection
-
-		KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1);
-		cout << "Synchronise status kernel 2: " << cudaDeviceSynchronize() << "\n";
-		//------------Done-Second-Kernel-----------------------------
-
-		gettimeofday(&timstr, NULL);
-		double end2 = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
-		printf("Elapsed time Aggregate Cost:\t\t\t%.6lf (s)\n", end2 - begin2);
-
-		cout << "Done CUDA " << endl;
-
-		cudaMemcpy(L1S, L1,(sizeof(int)) * (left.cols - decreseX) * (left.rows - decreseY)* (maxDisparity + 1), cudaMemcpyDeviceToHost);
-
-		cout << "Path Number " << pathNumber << endl;
-
+		printf("Elapsed time Disparity:\t\t\t%.6lf (s)\n", end1 - begin);
+#endif
 		//Disparity Selection--------------------------------------------------------------------------------------------
 		Mat disparity = DisparitySelectionOneArray(L1S, widthR, lengthR);
 
 		//---------------------------------------------------------------------------------------------------------------
-
+#if Profile
 		gettimeofday(&timstr, NULL);
 		double end = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 		printf("Elapsed time Disparity:\t\t\t%.6lf (s)\n", end - begin);
+#endif
+		//Display Logic----------------------------------
 		namedWindow("SMG");
 		Mat display;
 		double minVal, maxVal;
 		minMaxIdx(disparity, &minVal, &maxVal);
-		disparity.convertTo(display, CV_8UC3, 255 / (maxVal - minVal), -minVal);
+		disparity.convertTo(display, CV_8UC3, 255 / (maxDisparity), 0);
 		applyColorMap(display,display,COLORMAP_JET);
+		resize(display,display,size);
 		imshow("SMG", display);
+		//Done Display Logic-----------------------------
 
 #if SAVEIMAGE
 		ostringstream imageSaveLocation;
 		imageSaveLocation << "Results/"<<frame << ".png";
 		imwrite(imageSaveLocation.str(),left);
 #endif
+
 		frame ++;
-
-
 		cudaFree(L1);
 	}
 	//--------------------------------------------------------------------------------------------------
@@ -289,16 +311,19 @@ __host__ void SGM(){
 	printf("Frames Analysed:\t\t%d frames\n",frame);
 	printf("Frames per second:\t\t%f \n",frame/(endTotal-beginTotal));
 
-	free(initialInfo);
-	//free Memory
-	free(L1S);
-	//free(imageLeftA);
-	//free(imageRightA);
-	cudaDeviceReset();
+
+
+#if USERADAR
+	radar.closeRadar();
+#endif
 
 #if USECAMARA
 	zed.closeCamera();
 #endif
+	free(initialInfo);
+	free(L1S);
+	cudaDeviceReset();
+
 }
 
 
@@ -375,8 +400,10 @@ __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, in
 			pixelDi[LA].startY = ID;
 			pixelDi[LA].directionX = -1;
 			pixelDi[LA].directionY = 0;
-		} else if (blockID < 2 * width + 2 * length + (width + length - 1)) {
-			cout << "Should not happen \n";
+		}
+
+		else if (blockID < 2 * width + 2 * length + (width + length - 1)) {
+			//cout << "Should not happen \n";
 			ID = blockID - 2 * width - 2 * length;
 			pixelDi[LA].directionX = 1;
 			pixelDi[LA].directionY = 1;
