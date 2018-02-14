@@ -16,7 +16,7 @@
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
 
-#define DATA_PORT "/dev/ttyACM1"
+#define DATA_PORT "/dev/ttyACM3"
 #define BAUD_RATE 921600
 
 
@@ -172,9 +172,9 @@ int Radar::readInfo(){
 	stringstream stream;
 	stream << detectedObjects;
 #endif
-	cout << "Number Num: " << detectedObjects << " ";
+	//cout << "Number Num: " << detectedObjects << " ";
 	for (int obj = 0; obj < detectedObjects; obj++) {
-		cout << "Byte: " << byteToReadB << " ";
+		//cout << "Byte: " << byteToReadB << " ";
 		//cout << "\nObject Number " << obj << " :\n";
 		unsigned int range = 0;
 		unsigned int doppler = 0;
@@ -230,8 +230,7 @@ int Radar::readInfo(){
 
 		float xCoo = ((float) x) / xyzQ;
 		float yCoo = ((float) y) / xyzQ;
-		cout << "Coordinates: " << xCoo << " " << yCoo << " "
-				<< (float) (z / Descriptor2) << endl;
+		//cout << "Coordinates: " << xCoo << " " << yCoo << " " << (float) (z / Descriptor2) << endl;
 		byteToReadB = byteToReadB + 12;
 #if VISUAL
 		stream << "\n";

@@ -30,17 +30,18 @@ using namespace cv;
 #define SAVEIMAGE false
 #define Profile true
 
+#define DISPLAY true
 
-#define USECAMARA false
+#define USECAMARA true
 #define Paths8 false
 #define Camara 1
 #define WIDTHIMAGE 1280
 #define LENGTHIMAGE 720
 
 __host__ void SGM();
-__host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4,/*int* L5, int* L6, int* L7, int* L8,*/ int width, int length);
-__host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
-__host__ Mat DisparitySelectionOneArray(int*L, int width, int length);
+//__host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4,/*int* L5, int* L6, int* L7, int* L8,*/ int width, int length);
+//__host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
+//__host__ Mat DisparitySelectionOneArray(int*L, int width, int length);
 __host__ Mat DisparityCreation(int* imageFromKernel, int width, int len);
 
 __host__ String numberOfZeros(int number);
@@ -182,7 +183,7 @@ __host__ void SGM(){
 	int* disKernel;
 	int* disFromKernel = (int*) malloc((sizeof(int)) * (widthR) * (lengthR));
 	int errorCUDAMALLOCdis = cudaMalloc(&disKernel,(sizeof(int)*(widthR)*(lengthR)));
-	cout << "Error malloc dis: " << errorCUDAMALLOCdis << endl;
+	cout << "Malloc dis: " << errorCUDAMALLOCdis << endl;
 	//Timing Total
 	gettimeofday(&timstrTotal, NULL);
 	double beginTotal = timstrTotal.tv_sec + (timstrTotal.tv_usec / 1000000.0);
@@ -224,8 +225,10 @@ __host__ void SGM(){
 #if USECAMARA
 		imageLeftA = left.data;
 		imageRightA = right.data;
+#if DISPLAY
 		namedWindow("left");
 		imshow("left",left);
+#endif
 #else
 		Mat leftBlack;
 		cvtColor(left, leftBlack, CV_BGR2GRAY);
@@ -245,16 +248,33 @@ __host__ void SGM(){
 		KernelDisparityCalculations<<<dimGrid,dimBlock>>>(BoxCostX,BoxCostY,censusLa,censusRa,widthR,lengthR,leftC,rightC,costK,L1,disKernel); //Old copy L1
 		//------------Done-First-Kernel-----------------------------
 
-		//Second Kernel, Semi global matching and disparity Selection---------
-		KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1); //new Copy L1
+		Mat disparity = DisparityCreation(disFromKernel,widthR,lengthR);
+#if DISPLAY
+		//Display Logic----------------------------------
+		namedWindow("SMG");
+		Mat display;
+		double minVal, maxVal;
+		minMaxIdx(disparity, &minVal, &maxVal);
+		disparity.convertTo(display, CV_8UC3, 255 / (maxDisparity), 0);
+		applyColorMap(display,display,COLORMAP_JET);
+		resize(display,display,size);
+		imshow("SMG", display);
+		//Done Display Logic-----------------------------
+#endif
 		//----> Radar point fetch should be done here <---- TODO
 #if USERADAR
 		bool correctlyRead = radar.readInfo();
 		while (correctlyRead == 0) {
-			bool correctlyRead = radar.readInfo();
+			correctlyRead = radar.readInfo();
 		}
 #endif
 		//-----------------------------------------------------
+
+
+
+		//Second Kernel, Semi global matching and disparity Selection---------
+		KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1); //new Copy L1
+
 		int syncStatus = cudaDeviceSynchronize();
 #if Profile
 		if(syncStatus > 0){
@@ -282,23 +302,13 @@ __host__ void SGM(){
 		//Disparity Selection--------------------------------------------------------------------------------------------
 		//Mat disparity = DisparitySelectionOneArray(L1S, widthR, lengthR);
 		//Mat disparity(lengthR,widthR,CV_8U,disFromKernel);
-		Mat disparity = DisparityCreation(disFromKernel,widthR,lengthR);
+
 		//---------------------------------------------------------------------------------------------------------------
 #if Profile
 		gettimeofday(&timstr, NULL);
 		double end = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
 		printf("Elapsed time Disparity:\t\t\t%.6lf (s)\n", end - begin);
 #endif
-		//Display Logic----------------------------------
-		namedWindow("SMG");
-		Mat display;
-		double minVal, maxVal;
-		minMaxIdx(disparity, &minVal, &maxVal);
-		disparity.convertTo(display, CV_8UC3, 255 / (maxDisparity), 0);
-		applyColorMap(display,display,COLORMAP_JET);
-		resize(display,display,size);
-		imshow("SMG", display);
-		//Done Display Logic-----------------------------
 
 #if SAVEIMAGE
 		ostringstream imageSaveLocation;
@@ -327,6 +337,7 @@ __host__ void SGM(){
 #if USECAMARA
 	zed.closeCamera();
 #endif
+
 	free(disFromKernel);
 	free(initialInfo);
 	free(L1S);

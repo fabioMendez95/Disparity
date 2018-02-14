@@ -4,11 +4,11 @@ using namespace std;
 
 void ZedCamera::initCamera(){
 	initParameters.camera_resolution = sl::RESOLUTION_VGA;
-	initParameters.camera_fps = 10;
+	initParameters.camera_fps = 15;
 	initParameters.camera_buffer_count_linux = 0;
-	//initParameters.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
-	//initParameters.coordinate_units = sl::UNIT_METER;
-	//runtime_parameters.sensing_mode = sl::SENSING_MODE_STANDARD;
+	initParameters.depth_mode = sl::DEPTH_MODE_PERFORMANCE;
+	initParameters.coordinate_units = sl::UNIT_METER;
+	runtime_parameters.sensing_mode = sl::SENSING_MODE_STANDARD;
 
 	zed.open(initParameters);
 	imageSize = zed.getResolution();
@@ -18,19 +18,22 @@ void ZedCamera::initCamera(){
 }
 
 void ZedCamera::grabImage(){
-	sl::Mat	image_zedLeft(new_width,new_height,sl::MAT_TYPE_8U_C4);
-	sl::Mat image_zedRight(new_width,new_height,sl::MAT_TYPE_8U_C4);
+	sl::Mat	image_zedLeft(new_width,new_height,sl::MAT_TYPE_8U_C1);
+	sl::Mat image_zedRight(new_width,new_height,sl::MAT_TYPE_8U_C1);
 
-	int errorGrab = zed.grab(runtime_parameters);
+	sl::ERROR_CODE errorGrab = zed.grab(runtime_parameters);
+
 	//cout << "ZED grab: "<<errorGrab << endl;
 	if(errorGrab > 0){
-		cout << "Error Camera \n";
-		sleep(5);
+		cout << "Error Camera: "<< sl::errorCode2str(errorGrab) <<" \n";
+		sleep(2);
 	}
 	zed.retrieveImage(image_zedLeft, sl::VIEW_LEFT_GRAY, sl::MEM_CPU, new_width, new_height);
 	zed.retrieveImage(image_zedRight, sl::VIEW_RIGHT_GRAY, sl::MEM_CPU, new_width, new_height);
 	left = slMat2cvMat(image_zedLeft);
 	right= slMat2cvMat(image_zedRight);
+	image_zedLeft.free();
+	image_zedRight.free();
 }
 
 void ZedCamera::closeCamera(){

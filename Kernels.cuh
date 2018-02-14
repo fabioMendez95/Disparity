@@ -83,8 +83,12 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 	int minToUse = 0;
 
 	while(!done){
+		if (x >= width || y >= length || x < 0 || y < 0) {
+			done = true;
+			break;
+		}
 		int minimum = 8888;
-		if(influenceX < 0 || influenceY < 0){ //This line is different, less checks
+		if(influenceX < 0 || influenceY < 0 || influenceY >= length ||influenceX >= width ){ //This line is different, less checks
 
 			for(int d=startD; d<endD; d++){
 				int costPixel = cost[width*(y+d*(length))+x];
@@ -96,7 +100,6 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 			}
 		}
 		else{
-
 			for(int d = startD; d<endD; d++){
 				int costPixel = cost[width*(y+d*(length))+x];
 				int currentD = previousResults[d];
@@ -120,9 +123,6 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 		x = x + pathX;
 		y = y + pathY;
 		//previousResults = previousTemp;
-		if(x >= width || y >= length || x < 0 || y < 0){
-			done = true;
-		}
 	}
 }
 
@@ -180,6 +180,9 @@ __device__ void CostComputationKernelAndDisparitySelection(unsigned int* censusL
 	for(int xr = start; xr<=xl;xr++){
 		int valueToAssigned = 99999;
 		int dis = xl - xr;
+		int value = L[width*(y+dis*(length))+xl];
+		L[width*(y+dis*(length))+xl] = 0;
+
 		if (xr >= 0) {
 			/*if (threadId == 0) {
 				printf("\n disparity: %d \n\n", dis);
@@ -189,8 +192,6 @@ __device__ void CostComputationKernelAndDisparitySelection(unsigned int* censusL
 			valueToAssigned = HammingDistanceKernel(valueLeft, valueRight);
 
 			//Disparity Selection
-			int value = L[width*(y+dis*(length))+xl];
-			L[width*(y+dis*(length))+xl] = 0;
 			if (value < minimum) {
 				minimum = value;
 				disToAssign = dis;
