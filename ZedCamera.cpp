@@ -1,3 +1,5 @@
+/*
+
 #include "ZedCamera.h"
 using namespace cv;
 using namespace std;
@@ -89,4 +91,6 @@ string ZedCamera::type2str(int type) {
 
   return r;
 }
+*/
+
 

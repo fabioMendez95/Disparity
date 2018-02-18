@@ -1,4 +1,6 @@
-#include<sl/Camera.hpp>
+/*
+#include <sl/Camera.hpp>
+#include <sl/Core.hpp>
 #include "opencv2/core/core.hpp"
 #include<iostream>
 
@@ -28,4 +30,5 @@ private:
 	Mat right;
 
 	Mat slMat2cvMat(sl::Mat& input);
-};
+};*/
+

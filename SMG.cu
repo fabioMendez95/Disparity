@@ -16,8 +16,9 @@
 
 #include "Comparison.h"
 #include "Kernels.cuh"
-#include "ZedCamera.h"
+//#include "ZedCamera.h"
 #include "Radar.h"
+#include "Camera.h"
 
 using namespace std;
 using namespace cv;
@@ -58,6 +59,7 @@ int main (int argc, char** argv){
 	//comp.CompareDisparities();
 	//------------------------
 
+	//Testing Radar--------
 	//Radar info
 /*	Radar radar;
 	int samples = 100;
@@ -71,7 +73,26 @@ int main (int argc, char** argv){
 		samples = samples - 1;
 	}
 	radar.closeRadar();*/
+	//Testing Radar---------
 
+	//Testing Camera---------------
+	/*Camera cam;
+	cam.initCamera(1);
+	namedWindow("left");
+	namedWindow("right");
+	while(true){
+		cam.extractImage();
+		Mat right = cam.getRight();
+		Mat left = cam.getLeft();
+		imshow("left",left);
+		imshow("right",right);
+		if(waitKey(30)>=0){
+			break;
+		}
+	}*/
+	//TestingCameras---------------
+
+	//cam.CalibrateCamera();
 
 	SGM();
 	return 0;
@@ -108,12 +129,18 @@ __host__ void SGM(){
 	int BoxCostY = 7;
 
 	cout <<"Initialising camera\n";
-	ZedCamera zed;
+
 #if USECAMARA
+/*	ZedCamera zed;
 	zed.initCamera();
 	zed.grabImage();
 	left = zed.getLeftImage();
-	right = zed.getRightImage();
+	right = zed.getRightImage();*/
+	Camera cam;
+	cam.initCamera(1);
+	cam.extractImage();
+	right = cam.getRight();
+	left = cam.getLeft();
 
 #else
 	//Reading Images
@@ -207,9 +234,12 @@ __host__ void SGM(){
 		}
 		//Read Image---------------------------------------
 #if USECAMARA
-		zed.grabImage();
+/*		zed.grabImage();
 		left = zed.getLeftImage();
-		right = zed.getRightImage();
+		right = zed.getRightImage();*/
+		cam.extractImage();
+		right = cam.getRight();
+		left = cam.getLeft();
 #else
 		left = imread(getImageLocation(frame,"left"), CV_LOAD_IMAGE_COLOR);
 		right= imread(getImageLocation(frame,"right"), CV_LOAD_IMAGE_COLOR);
@@ -223,8 +253,14 @@ __host__ void SGM(){
 #endif
 		//Converting Images--------------------------------
 #if USECAMARA
-		imageLeftA = left.data;
-		imageRightA = right.data;
+/*		imageLeftA = left.data;
+		imageRightA = right.data;*/
+		Mat leftBlack;
+		cvtColor(left, leftBlack, CV_BGR2GRAY);
+		Mat rightBlack;
+		cvtColor(right, rightBlack, CV_BGR2GRAY);
+		imageLeftA = leftBlack.data;
+		imageRightA = rightBlack.data;
 #if DISPLAY
 		namedWindow("left");
 		imshow("left",left);
@@ -335,7 +371,8 @@ __host__ void SGM(){
 #endif
 
 #if USECAMARA
-	zed.closeCamera();
+	//zed.closeCamera();
+	cam.close();
 #endif
 
 	free(disFromKernel);
