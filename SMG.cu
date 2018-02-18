@@ -13,6 +13,8 @@
 #include<time.h>
 #include<sys/time.h>
 
+#include<mutex>
+#include<thread>
 
 #include "Comparison.h"
 #include "Kernels.cuh"
@@ -26,7 +28,7 @@ using namespace cv;
 #define threadx 16
 #define thready 16
 
-#define USERADAR false
+#define USERADAR true
 
 #define SAVEIMAGE false
 #define Profile true
@@ -34,15 +36,12 @@ using namespace cv;
 #define DISPLAY true
 
 #define USECAMARA true
-#define Paths8 false
+#define Paths8 true
 #define Camara 1
 #define WIDTHIMAGE 1280
 #define LENGTHIMAGE 720
 
 __host__ void SGM();
-//__host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4,/*int* L5, int* L6, int* L7, int* L8,*/ int width, int length);
-//__host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right);
-//__host__ Mat DisparitySelectionOneArray(int*L, int width, int length);
 __host__ Mat DisparityCreation(int* imageFromKernel, int width, int len);
 
 __host__ String numberOfZeros(int number);
@@ -50,8 +49,10 @@ __host__ String getImageLocation(int frame, String side);
 
 __host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length);
 __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, int width, int length);
+__host__ void radarThread();
 
-//sl::Camera zed;
+bool readRadar = true;
+mutex radarMtx;
 
 int main (int argc, char** argv){
 	//Comparison Calculations
@@ -59,43 +60,25 @@ int main (int argc, char** argv){
 	//comp.CompareDisparities();
 	//------------------------
 
-	//Testing Radar--------
-	//Radar info
-/*	Radar radar;
-	int samples = 100;
-	radar.startRadar();
-	while(samples > 0){
-		bool correctlyRead = radar.readInfo();
-		while(correctlyRead == 0){
-			bool correctlyRead = radar.readInfo();
-		}
-		waitKey(50);
-		samples = samples - 1;
-	}
-	radar.closeRadar();*/
-	//Testing Radar---------
-
-	//Testing Camera---------------
-	/*Camera cam;
-	cam.initCamera(1);
-	namedWindow("left");
-	namedWindow("right");
-	while(true){
-		cam.extractImage();
-		Mat right = cam.getRight();
-		Mat left = cam.getLeft();
-		imshow("left",left);
-		imshow("right",right);
-		if(waitKey(30)>=0){
-			break;
-		}
-	}*/
-	//TestingCameras---------------
-
-	//cam.CalibrateCamera();
-
 	SGM();
 	return 0;
+}
+
+__host__ void radarThread(){
+	/*bool correctlyRead = radar.readInfo();
+	while (correctlyRead == 0) {
+		correctlyRead = radar.readInfo();
+	}*/
+	Radar radar;
+	radar.startRadar();
+	bool copyReadRadar = true;
+	while(copyReadRadar){
+		radar.readInfo();
+		radarMtx.lock();
+		copyReadRadar = readRadar;
+		radarMtx.unlock();
+	}
+	radar.closeRadar();
 }
 
 __host__ void SGM(){
@@ -106,8 +89,7 @@ __host__ void SGM(){
 
 	//Radar Info
 #if USERADAR
-	Radar radar;
-	radar.startRadar();
+	thread thrRadar(radarThread);
 #endif
 	struct timeval timstr;
 	struct timeval timstrTotal;
@@ -253,7 +235,7 @@ __host__ void SGM(){
 #endif
 		//Converting Images--------------------------------
 #if USECAMARA
-/*		imageLeftA = left.data;
+/*		imag launching thread then read from iteLeftA = left.data;
 		imageRightA = right.data;*/
 		Mat leftBlack;
 		cvtColor(left, leftBlack, CV_BGR2GRAY);
@@ -289,20 +271,18 @@ __host__ void SGM(){
 		//Display Logic----------------------------------
 		namedWindow("SMG");
 		Mat display;
-		double minVal, maxVal;
-		minMaxIdx(disparity, &minVal, &maxVal);
 		disparity.convertTo(display, CV_8UC3, 255 / (maxDisparity), 0);
-		applyColorMap(display,display,COLORMAP_JET);
+		applyColorMap(display,display,COLORMAP_HOT);
 		resize(display,display,size);
 		imshow("SMG", display);
 		//Done Display Logic-----------------------------
 #endif
 		//----> Radar point fetch should be done here <---- TODO
 #if USERADAR
-		bool correctlyRead = radar.readInfo();
+		/*bool correctlyRead = radar.readInfo();
 		while (correctlyRead == 0) {
 			correctlyRead = radar.readInfo();
-		}
+		}*/
 #endif
 		//-----------------------------------------------------
 
@@ -327,13 +307,6 @@ __host__ void SGM(){
 #if Profile
 		cout<< "Cuda copy3: " << errorMemCpy3 << endl;
 		cout << "Path Number " << pathNumber << endl;
-#endif
-
-
-#if Profile
-		gettimeofday(&timstr, NULL);
-		double end1 = timstr.tv_sec + (timstr.tv_usec / 1000000.0);
-		printf("Elapsed time Disparity:\t\t\t%.6lf (s)\n", end1 - begin);
 #endif
 		//Disparity Selection--------------------------------------------------------------------------------------------
 		//Mat disparity = DisparitySelectionOneArray(L1S, widthR, lengthR);
@@ -367,7 +340,10 @@ __host__ void SGM(){
 
 
 #if USERADAR
-	radar.closeRadar();
+	radarMtx.lock();
+	readRadar = false;
+	radarMtx.unlock();
+	thrRadar.join();
 #endif
 
 #if USECAMARA
@@ -500,57 +476,8 @@ __host__ Mat DisparityCreation(int* imageFromKernel, int width, int len){
 			disparity.at<uchar>(y,x) = imageFromKernel[y*width+x];
 		}
 	}
-
 	return disparity;
 }
-//Disparity Selection Process
-__host__ Mat DisparitySelectionP(int* L1, int* L2, int* L3, int* L4/*,int* L5, int* L6, int* L7, int* L8*/, int width, int length){
-	Mat disparity(length,width,CV_8U);
-
-	for(int y=0; y<length; y++){
-		for(int x=0; x<width; x++){
-			int costA = 99999;
-			int disPix = 0;
-			for (int d = 0; d<maxDisparity; d++){
-				int sumAgg = L1[width*(y+d*length)+x] + L2[width*(y+d*(length))+x]+
-						L3[width*(y+d*length)+x] + L4[width*(y+d*(length))+x] /*+ L5[width*(y+d*(length))+x]+
-						L6[width*(y+d*length)+x] + L7[width*(y+d*(length))+x] + L8[width*(y+d*length)+x]*/;
-				if (sumAgg < costA){
-					costA = sumAgg;
-					disPix = d;
-				}
- 			}
-			//cout << "disparity pixel " <<x << " " << y << " is " << disPix << " with value "<< costA<< endl;
-			disparity.at<uchar>(y,x) = disPix;
-		}
-	}
-	return disparity;
-}
-
-__host__ Mat DisparitySelectionOneArray(int*L, int width, int length){
-	Mat disparity(length,width,CV_8U);
-	for(int y=0;y<length;y++){
-		for(int x=0;x<width;x++){
-			int costA = 99999;
-			int disPix = 0;
-			for (int d=0;d<maxDisparity;d++){
-				int value = L[width*(y+d*length)+x];
-				if(value < costA){
-					costA = value;
-					disPix = d;
-				}
-			}
-			disparity.at<uchar>(y,x) = disPix;
-		}
-	}
-	return disparity;
-}
-
-__host__ void DivideImagesCam(Mat completeImage, Mat* left, Mat* right){
-	*left = completeImage(Rect(0,0,WIDTHIMAGE,LENGTHIMAGE));
-	*right = completeImage(Rect(1280,0,WIDTHIMAGE,LENGTHIMAGE));
-}
-
 
 //side = left, right
 __host__ String getImageLocation(int frame, String side){

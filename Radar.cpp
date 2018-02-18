@@ -16,7 +16,7 @@
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
 
-#define DATA_PORT "/dev/ttyACM3"
+#define DATA_PORT "/dev/ttyACM2"
 #define BAUD_RATE 921600
 
 

@@ -21,6 +21,7 @@ void Camera::getCamera(){
 }
 
 void Camera::initCamera(int device){
+	stream.set(CV_CAP_PROP_OPENNI_MAX_BUFFER_SIZE,0);
 	stream.open(device);
 	if(!stream.isOpened()){
 		cout << "Error: Cant find camera on device: " << device << endl;
@@ -79,12 +80,12 @@ void Camera::extractImage(){
 
 Mat Camera::getLeft(){
 	remap(left,rviewL,map1L,map2L,INTER_LINEAR);
-	resize(rviewL,rviewL,Size(320,240));
+	resize(rviewL,rviewL,Size(160,120));//320,240
 	return rviewL;
 }
 Mat Camera::getRight(){
 	remap(rigth,rviewR,map1R,map2R,INTER_LINEAR);
-	resize(rviewR,rviewR,Size(320,240));
+	resize(rviewR,rviewR,Size(160,120));//320,240
 	return rviewR;
 }
 
