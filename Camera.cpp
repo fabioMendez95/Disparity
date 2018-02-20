@@ -80,7 +80,7 @@ void Camera::extractImage(){
 
 Mat Camera::getLeft(){
 	remap(left,rviewL,map1L,map2L,INTER_LINEAR);
-	resize(rviewL,rviewL,Size(160,120));//320,240
+	resize(rviewL,rviewL,Size(160,120));//320,240  160,120 1280,720
 	return rviewL;
 }
 Mat Camera::getRight(){

@@ -27,19 +27,17 @@ using namespace cv;
 
 #define threadx 16
 #define thready 16
+#define CamDevice 0
 
-#define USERADAR true
 
 #define SAVEIMAGE false
 #define Profile true
 
 #define DISPLAY true
 
+#define USERADAR true
 #define USECAMARA true
-#define Paths8 true
-#define Camara 1
-#define WIDTHIMAGE 1280
-#define LENGTHIMAGE 720
+#define Paths8 false
 
 __host__ void SGM();
 __host__ Mat DisparityCreation(int* imageFromKernel, int width, int len);
@@ -51,8 +49,12 @@ __host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length);
 __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, int width, int length);
 __host__ void radarThread();
 
+__host__ void radarPointsInImage(Mat& disparity);
+
 bool readRadar = true;
 mutex radarMtx;
+vector<double> radarToSB;
+
 
 int main (int argc, char** argv){
 	//Comparison Calculations
@@ -64,18 +66,42 @@ int main (int argc, char** argv){
 	return 0;
 }
 
+
+__host__ void radarPointsInImage(Mat& disparity){
+	int radarLine = disparity.rows / 2;
+	vector<double> local = radarToSB;
+	for(int x = 0; x < disparity.cols; x++){
+		double Z = 3.36 / (double)((int)disparity.at<uchar>(radarLine,x)+1);
+		int num = 0;
+		cout <<"\nZ: " << Z <<" Size: " << local.size()  <<endl;
+		for(double distance : local){
+			cout << distance << " ";
+			if(Z > distance - 0.05 && Z < distance+0.05){
+				cout << "Match ";
+				circle(disparity,Point(x,radarLine),5,Scalar(255,0,0),-1,8);
+				local.erase(local.begin()+num);
+				num ++;
+				break;
+			}
+		}
+	}
+
+}
+
 __host__ void radarThread(){
 	/*bool correctlyRead = radar.readInfo();
 	while (correctlyRead == 0) {
 		correctlyRead = radar.readInfo();
 	}*/
 	Radar radar;
+	radar.setData(0.009+0.0028);
 	radar.startRadar();
 	bool copyReadRadar = true;
 	while(copyReadRadar){
 		radar.readInfo();
 		radarMtx.lock();
 		copyReadRadar = readRadar;
+		radarToSB = radar.distanceToSB;
 		radarMtx.unlock();
 	}
 	radar.closeRadar();
@@ -84,7 +110,7 @@ __host__ void radarThread(){
 __host__ void SGM(){
 	int frameNumber = 30;
 	int frame = 0;
-	Size size(720,400);
+	Size size(1280,720);
 	cout << "Starting process \n";
 
 	//Radar Info
@@ -95,7 +121,7 @@ __host__ void SGM(){
 	struct timeval timstrTotal;
 	Mat left, right;
 	Mat completeImage;
-	//Texture Creation
+	//Texture Creationarray of floats c++ vector
 	Mat leftD,rightD;
 	uchar* imageLeftA,*imageRightA,*leftC,*rightC;
 
@@ -119,7 +145,7 @@ __host__ void SGM(){
 	left = zed.getLeftImage();
 	right = zed.getRightImage();*/
 	Camera cam;
-	cam.initCamera(1);
+	cam.initCamera(CamDevice);
 	cam.extractImage();
 	right = cam.getRight();
 	left = cam.getLeft();
@@ -155,7 +181,7 @@ __host__ void SGM(){
 	cout << "Disparity Size : " << widthR << " " << lengthR << endl;
 
 #if USECAMARA && Paths8
-	int threadNum = 382;
+	int threadNum = 199;//382 199
 #elif USECAMARA
 	int threadNum = 255;
 #else
@@ -238,8 +264,10 @@ __host__ void SGM(){
 /*		imag launching thread then read from iteLeftA = left.data;
 		imageRightA = right.data;*/
 		Mat leftBlack;
+		//bilateralFilter(left,left,9,75,75);
 		cvtColor(left, leftBlack, CV_BGR2GRAY);
 		Mat rightBlack;
+		//bilateralFilter(right,right,9,75,75);
 		cvtColor(right, rightBlack, CV_BGR2GRAY);
 		imageLeftA = leftBlack.data;
 		imageRightA = rightBlack.data;
@@ -271,7 +299,14 @@ __host__ void SGM(){
 		//Display Logic----------------------------------
 		namedWindow("SMG");
 		Mat display;
-		disparity.convertTo(display, CV_8UC3, 255 / (maxDisparity), 0);
+		Mat disparity2;
+		//bilateral(src,dst,a,b,c) -> a=neighbourhood to consider, b=threshold between pixel values, c=distance metric to consider
+		// b=realted to disparity
+		bilateralFilter(disparity,disparity2,2,3,2);
+		radarPointsInImage(disparity2);
+		double minVal, maxVal;
+		minMaxIdx(disparity, &minVal, &maxVal);
+		disparity2.convertTo(display, CV_8UC3, 255 / (maxVal), minVal);
 		applyColorMap(display,display,COLORMAP_HOT);
 		resize(display,display,size);
 		imshow("SMG", display);

@@ -15,8 +15,9 @@
 #include <string.h>
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
+#include<math.h>
 
-#define DATA_PORT "/dev/ttyACM2"
+#define DATA_PORT "/dev/ttyACM1"
 #define BAUD_RATE 921600
 
 
@@ -172,6 +173,8 @@ int Radar::readInfo(){
 	stringstream stream;
 	stream << detectedObjects;
 #endif
+	dataPointNum = detectedObjects;
+	distanceToSB.clear();
 	//cout << "Number Num: " << detectedObjects << " ";
 	for (int obj = 0; obj < detectedObjects; obj++) {
 		//cout << "Byte: " << byteToReadB << " ";
@@ -230,6 +233,13 @@ int Radar::readInfo(){
 
 		float xCoo = ((float) x) / xyzQ;
 		float yCoo = ((float) y) / xyzQ;
+
+		//Polar Coordinates
+		double mag = sqrt(xCoo*xCoo + yCoo*yCoo);
+		double ang = atan(yCoo/xCoo);
+		distanceToSB.push_back(getDistancePointToStereo(mag,ang));
+		//cout << "Polar Coo: "<<mag << ' ' << ang << endl;
+
 		//cout << "Coordinates: " << xCoo << " " << yCoo << " " << (float) (z / Descriptor2) << endl;
 		byteToReadB = byteToReadB + 12;
 #if VISUAL
@@ -247,4 +257,17 @@ int Radar::readInfo(){
 #endif
 	cout << "done Passing info \n";
 	return 1;
+}
+
+double Radar::getDistancePointToStereo(double mag, double ang){
+	double z = Rts + mag*sin(M_PI/2-abs(ang));
+	return z;
+}
+
+void Radar::setData(int distanceToSB){
+	Rts = distanceToSB;
+}
+
+int Radar::getDataPointNum(){
+	return dataPointNum;
 }

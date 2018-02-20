@@ -13,11 +13,11 @@ struct pointCoo{
 	int x,y;
 };
 
-#define p1 10
-#define p2 150 //150
+#define p1 10//5  //10
+#define p2 200//1000 //150
 
 
-#define maxDisparity 100
+#define maxDisparity 250
 
 //Kernel 1 main
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* L, int* image);

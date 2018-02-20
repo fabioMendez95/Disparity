@@ -11,9 +11,12 @@
 #include <string.h>
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
+#include <vector>
 
 
 #define VISUAL true
+
+using namespace std;
 
 class Radar{
 public:
@@ -21,7 +24,15 @@ public:
 	void startRadar();
 	void closeRadar();
 	void sendSingleToPy();
+
+	int getDataPointNum();
+	vector<double> distanceToSB;
+
+	void setData(int distanceToSB);
 private:
+	int Rts = 0;
+	int dataPointNum = 0;
+
 	//Variable initialization
 	int fd;
 	struct termios SerialPortSettings;// Create the structure
@@ -33,5 +44,7 @@ private:
 
 	//Funcrtions
 	bool checkMagicWord(int readWord, int position);
+
+	double getDistancePointToStereo(double mag, double ang);
 
 };
