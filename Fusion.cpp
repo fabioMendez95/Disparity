@@ -22,7 +22,9 @@ void Fusion::radarPointsInImage(Mat disparitySrc, vector<double> radarToSB){
 	objects.clear();
 
 	for(int x = 0; x < disparity.cols; x++){
-		double Z = 3.36 / (double)((int)disparity.at<uchar>(radarLine,x)+1);
+		double Z = 336 / ((double)((int)disparity.at<uchar>(radarLine,x))*0.004*xRep);
+		Z = Z/1000;
+		cout << "Distance " << Z << endl;
 		int num = 0;
 		//cout <<"\nZ: " << Z <<" Size: " << local.size()  <<endl;
 		for(double distance : local){
@@ -32,6 +34,7 @@ void Fusion::radarPointsInImage(Mat disparitySrc, vector<double> radarToSB){
 				int width = widthOfObject(disparity,x);
 				ObjectDR obj = getObjectDimensions(disparity,width,x);
 				local.erase(local.begin()+num);
+				obj.distance = distance;
 				objects.push_back(obj);
 
 				circle(display,Point(x,radarLine),5,Scalar(255,0,0),-1,3);
@@ -55,10 +58,11 @@ Mat Fusion::displayOnImage(Mat& image){
 	for(ObjectDR object : objects){
 		int newXC = object.centre.x*xRep;
 		int newYC = object.centre.y*yRep;
-		if(object.width > 2){
+		if(object.width > 5 && object.length > 5){
 			Point pt1(newXC-object.width*xRep/2,newYC-object.length*yRep/2);
 			Point pt2(newXC+object.width*xRep/2,newYC+object.length*yRep/2);
 			rectangle(result,pt1,pt2,Scalar(0,255,0),2);
+			putText(result,to_string(object.distance),Point(newXC,newYC),FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200,200,250), 1, CV_AA);
 		}
 		//circle(result,Point(newX,radarLine*yRep),5,Scalar(255,0,0),-1,3);
 	}
@@ -118,7 +122,7 @@ int Fusion::widthOfObject(Mat disparity, int x){
 	int width = 0;
 	for(int cx = x+1; cx<xDown; cx ++){
 		int compare = (int)disparity.at<uchar>(radarLine,cx);
-		cout << x << ": "<<disparityValue <<" " << compare << endl;
+		//cout << x << ": "<<disparityValue <<" " << compare << endl;
 		if((disparityValue < compare + pixelError && disparityValue > compare - pixelError)){
 			width = width+1;
 		}
@@ -131,7 +135,7 @@ int Fusion::widthOfObject(Mat disparity, int x){
 
 Mat Fusion::getFilterImage(Mat disparitySrc){
 	Mat disparity2;
-	bilateralFilter(disparitySrc,disparity2,9,20,20);
+	bilateralFilter(disparitySrc,disparity2,9,1,5);
 	return disparity2;
 }
 

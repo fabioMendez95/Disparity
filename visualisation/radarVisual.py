@@ -30,7 +30,8 @@ class visualRadar:
             pointArray[pointPoss,0] = float(splitInfo[0])
             #np.arctan(float(splitInfo[1])/float(splitInfo[0]))
             pointArray[pointPoss,1] = float(splitInfo[1])
-            #math.sqrt(float(splitInfo[1])*float(splitInfo[1]) + float(splitInfo[0])*float(splitInfo[0]))
+            print "distance"
+            print math.sqrt(float(splitInfo[1])*float(splitInfo[1]) + float(splitInfo[0])*float(splitInfo[0]))
 
         return pointArray
 

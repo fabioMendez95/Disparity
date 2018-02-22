@@ -11,6 +11,7 @@ struct ObjectDR{
 	int width;
 	int length;
 	Point centre;
+	double distance;
 };
 
 class Fusion{
@@ -22,7 +23,7 @@ public:
 	vector<ObjectDR> getObjects();
 
 private:
-	double errorValue = 0.2;
+	double errorValue = 0.5;
 
 	int xDown;
 	int xUp;
@@ -37,7 +38,7 @@ private:
 	int widthOfObject(Mat disparity, int x);
 	ObjectDR getObjectDimensions(Mat disparity, int width, int x);
 
-	int pixelError = 3;
+	int pixelError = 2;
 
 	vector<ObjectDR> objects;
 
