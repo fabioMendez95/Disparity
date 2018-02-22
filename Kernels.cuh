@@ -14,10 +14,10 @@ struct pointCoo{
 };
 
 #define p1 10//5  //10
-#define p2 200//1000 //150
+#define p2 250//200//1000 //150
 
 
-#define maxDisparity 250
+#define maxDisparity 200
 
 //Kernel 1 main
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* L, int* image);
@@ -83,10 +83,6 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 	int minToUse = 0;
 
 	while(!done){
-		if (x >= width || y >= length || x < 0 || y < 0) {
-			done = true;
-			break;
-		}
 		int minimum = 8888;
 		if(influenceX < 0 || influenceY < 0 || influenceY >= length ||influenceX >= width ){ //This line is different, less checks
 
@@ -123,6 +119,10 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 		x = x + pathX;
 		y = y + pathY;
 		//previousResults = previousTemp;
+		if (x >= width || y >= length || x < 0 || y < 0) {
+			done = true;
+			break;
+		}
 	}
 }
 

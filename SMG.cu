@@ -18,6 +18,7 @@
 
 #include "Comparison.h"
 #include "Kernels.cuh"
+#include "Fusion.h"
 //#include "ZedCamera.h"
 #include "Radar.h"
 #include "Camera.h"
@@ -49,11 +50,10 @@ __host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length);
 __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, int width, int length);
 __host__ void radarThread();
 
-__host__ void radarPointsInImage(Mat& disparity);
-
 bool readRadar = true;
 mutex radarMtx;
 vector<double> radarToSB;
+Fusion fus;
 
 
 int main (int argc, char** argv){
@@ -64,28 +64,6 @@ int main (int argc, char** argv){
 
 	SGM();
 	return 0;
-}
-
-
-__host__ void radarPointsInImage(Mat& disparity){
-	int radarLine = disparity.rows / 2;
-	vector<double> local = radarToSB;
-	for(int x = 0; x < disparity.cols; x++){
-		double Z = 3.36 / (double)((int)disparity.at<uchar>(radarLine,x)+1);
-		int num = 0;
-		cout <<"\nZ: " << Z <<" Size: " << local.size()  <<endl;
-		for(double distance : local){
-			cout << distance << " ";
-			if(Z > distance - 0.05 && Z < distance+0.05){
-				cout << "Match ";
-				circle(disparity,Point(x,radarLine),5,Scalar(255,0,0),-1,8);
-				local.erase(local.begin()+num);
-				num ++;
-				break;
-			}
-		}
-	}
-
 }
 
 __host__ void radarThread(){
@@ -111,6 +89,8 @@ __host__ void SGM(){
 	int frameNumber = 30;
 	int frame = 0;
 	Size size(1280,720);
+
+
 	cout << "Starting process \n";
 
 	//Radar Info
@@ -155,6 +135,8 @@ __host__ void SGM(){
 	left = imread("Images/KITTY/left/0000000000.png", CV_LOAD_IMAGE_COLOR);
 	right= imread("Images/KITTY/right/0000000000.png", CV_LOAD_IMAGE_COLOR);
 #endif
+
+	fus.setValuesFusion(left.cols,left.rows,size);
 
 	cout << "Camera ready \n";
 	//Initialisation Parameters---------------
@@ -273,7 +255,8 @@ __host__ void SGM(){
 		imageRightA = rightBlack.data;
 #if DISPLAY
 		namedWindow("left");
-		imshow("left",left);
+		Mat showLeft = cam.getUnfilterLeft();
+		imshow("left",showLeft);
 #endif
 #else
 		Mat leftBlack;
@@ -297,19 +280,25 @@ __host__ void SGM(){
 		Mat disparity = DisparityCreation(disFromKernel,widthR,lengthR);
 #if DISPLAY
 		//Display Logic----------------------------------
-		namedWindow("SMG");
+		namedWindow("Disparity");
 		Mat display;
-		Mat disparity2;
+		//Mat disparity2;
 		//bilateral(src,dst,a,b,c) -> a=neighbourhood to consider, b=threshold between pixel values, c=distance metric to consider
 		// b=realted to disparity
-		bilateralFilter(disparity,disparity2,2,3,2);
-		radarPointsInImage(disparity2);
+		//bilateralFilter(disparity,disparity2,3,2,2);
+		//radarPointsInImage(disparity2);
+#if USECAMARA && USERADAR
+		fus.radarPointsInImage(disparity,radarToSB);
+		namedWindow("Fusion");
+		Mat fusion = fus.displayOnImage(showLeft);
+		imshow("Fusion",fusion);
+#endif
 		double minVal, maxVal;
 		minMaxIdx(disparity, &minVal, &maxVal);
-		disparity2.convertTo(display, CV_8UC3, 255 / (maxVal), minVal);
+		disparity.convertTo(display, CV_8UC3, 255 / (maxVal), minVal);
 		applyColorMap(display,display,COLORMAP_HOT);
 		resize(display,display,size);
-		imshow("SMG", display);
+		imshow("Disparity", display);
 		//Done Display Logic-----------------------------
 #endif
 		//----> Radar point fetch should be done here <---- TODO

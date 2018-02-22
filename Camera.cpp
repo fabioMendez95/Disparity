@@ -78,13 +78,22 @@ void Camera::extractImage(){
 	rigth = lr.right;
 }
 
+Mat Camera::getUnfilterLeft(){
+	return leftUnfilter;
+}
+Mat Camera::getUnfilterRight(){
+	return rigthUnfilter;
+}
+
 Mat Camera::getLeft(){
 	remap(left,rviewL,map1L,map2L,INTER_LINEAR);
+	rviewL.copyTo(leftUnfilter);
 	resize(rviewL,rviewL,Size(160,120));//320,240  160,120 1280,720
 	return rviewL;
 }
 Mat Camera::getRight(){
 	remap(rigth,rviewR,map1R,map2R,INTER_LINEAR);
+	rviewR.copyTo(rigthUnfilter);
 	resize(rviewR,rviewR,Size(160,120));//320,240
 	return rviewR;
 }

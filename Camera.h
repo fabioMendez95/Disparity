@@ -23,6 +23,8 @@ public:
 	void createCameraSample(int num);
 
 	void close();
+	Mat getUnfilterLeft();
+	Mat getUnfilterRight();
 
 private:
 	VideoCapture stream;
@@ -59,6 +61,8 @@ private:
 
 	Mat left;
 	Mat rigth;
+	Mat leftUnfilter;
+	Mat rigthUnfilter;
 
 	StereoPair getImages();
 };
