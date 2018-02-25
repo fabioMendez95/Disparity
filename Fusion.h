@@ -23,7 +23,7 @@ public:
 	vector<ObjectDR> getObjects();
 
 private:
-	double errorValue = 0.5;
+	double errorValue = 0.1;
 
 	int xDown;
 	int xUp;

@@ -135,7 +135,7 @@ int Fusion::widthOfObject(Mat disparity, int x){
 
 Mat Fusion::getFilterImage(Mat disparitySrc){
 	Mat disparity2;
-	bilateralFilter(disparitySrc,disparity2,9,1,5);
+	bilateralFilter(disparitySrc,disparity2,9,2,5);
 	return disparity2;
 }
 

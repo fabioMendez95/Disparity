@@ -28,7 +28,7 @@ using namespace cv;
 
 #define threadx 16
 #define thready 16
-#define CamDevice 0
+#define CamDevice 1
 
 
 #define SAVEIMAGE false
@@ -49,12 +49,18 @@ __host__ String getImageLocation(int frame, String side);
 __host__ pointCoo getPoint(int ID, int pathX, int pathY, int width, int length);
 __host__ void getKernelInitialInformation(int pathNumber, startInfo* pixelDi, int width, int length);
 __host__ void radarThread();
+__host__ void cameraThread(Camera& cam);
+
 
 bool readRadar = true;
+bool readCameraB = true;
 mutex radarMtx;
+mutex readCameraMtx;
 vector<double> radarToSB;
 Fusion fus;
 
+
+Mat leftThread, rightThread;
 
 int main (int argc, char** argv){
 	//Comparison Calculations
@@ -83,6 +89,20 @@ __host__ void radarThread(){
 		radarMtx.unlock();
 	}
 	radar.closeRadar();
+}
+
+__host__ void cameraThread(Camera& cam){
+	bool readingCamera = true;
+
+	while(readingCamera){
+		cam.extractImage();
+		readCameraMtx.lock();
+		rightThread = cam.getRight();
+		leftThread = cam.getLeft();
+		readingCamera = readCameraB;
+		readCameraMtx.unlock();
+		waitKey(10);
+	}
 }
 
 __host__ void SGM(){
@@ -129,6 +149,8 @@ __host__ void SGM(){
 	cam.extractImage();
 	right = cam.getRight();
 	left = cam.getLeft();
+
+	thread thrCamera(cameraThread,ref(cam));
 
 #else
 	//Reading Images
@@ -227,9 +249,13 @@ __host__ void SGM(){
 /*		zed.grabImage();
 		left = zed.getLeftImage();
 		right = zed.getRightImage();*/
-		cam.extractImage();
+	/*	cam.extractImage();
 		right = cam.getRight();
-		left = cam.getLeft();
+		left = cam.getLeft();*/
+		readCameraMtx.lock();
+		leftThread.copyTo(left);
+		rightThread.copyTo(right);
+		readCameraMtx.unlock();
 #else
 		left = imread(getImageLocation(frame,"left"), CV_LOAD_IMAGE_COLOR);
 		right= imread(getImageLocation(frame,"right"), CV_LOAD_IMAGE_COLOR);
@@ -372,6 +398,10 @@ __host__ void SGM(){
 
 #if USECAMARA
 	//zed.closeCamera();
+	readCameraMtx.lock();
+	readCameraB = false;
+	readCameraMtx.unlock();
+	thrCamera.join();
 	cam.close();
 #endif
 
