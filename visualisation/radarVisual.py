@@ -22,16 +22,17 @@ class visualRadar:
     def getArray(self, data):
         infoFromProgram = data.split("\n")
         pointNum = int(infoFromProgram[0])
+        #print pointNum
         pointsStr = (infoFromProgram[1:])
         pointArray = np.zeros(shape = (pointNum,2))
     
         for pointPoss in range(0,pointNum):
             splitInfo = pointsStr[pointPoss].split(' ')
-            pointArray[pointPoss,0] = float(splitInfo[0])
+            pointArray[pointPoss,0] = float(splitInfo[0])#math.sqrt(float(splitInfo[0])*float(splitInfo[0]) + float(splitInfo[1])*float(splitInfo[1]))
             #np.arctan(float(splitInfo[1])/float(splitInfo[0]))
-            pointArray[pointPoss,1] = float(splitInfo[1])
-            print "distance"
-            print math.sqrt(float(splitInfo[1])*float(splitInfo[1]) + float(splitInfo[0])*float(splitInfo[0]))
+            pointArray[pointPoss,1] = float(splitInfo[1])#math.atan(float(splitInfo[1])/float(splitInfo[0]))
+            #print "distance"
+            #print math.sqrt(float(splitInfo[1])*float(splitInfo[1]) + float(splitInfo[0])*float(splitInfo[0]))
 
         return pointArray
 
@@ -48,7 +49,7 @@ class visualRadar:
             try:
                 receivedData = self.readPipe()
                 infoPoints = self.getArray(receivedData)
-                print infoPoints
+                #print infoPoints
                 self.plotPoints(infoPoints)
             except:
                 time.sleep(0.2)#Needs to be smaller than the sampling rate of the Radar for better visualisation     

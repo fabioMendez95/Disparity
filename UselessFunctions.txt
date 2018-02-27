@@ -1,4 +1,70 @@
 
+	
+	
+				double difference = fabs(Z - distance);
+			if (difference < mimDifference && difference <= errorValue){
+				mimDifference = difference;
+				toDelete = num;
+				XtoUse   = x;
+				num++;
+				distanceObj = distance;
+			}
+			
+			/*int width = widthOfObject(disparity, XtoUse);
+		ObjectDR obj = getObjectDimensions(disparity, width, XtoUse);
+		local.erase(local.begin() + toDelete);
+		obj.distance = distanceObj;
+		objects.push_back(obj);
+		if (showFusionProcess) {
+			circle(display, Point(x, radarLine), 5, Scalar(255, 0, 0), -1, 3);
+			line(display, Point(x, radarLine), Point(x + width, radarLine),
+					Scalar(0, 0, 0), 2);
+			line(display, Point(x + width / 2, radarLine - obj.length / 2),
+					Point(x + width / 2, radarLine + obj.length / 2),
+					Scalar(0, 0, 0), 2);
+		}*/
+		
+				int num = 0;
+		int toDelete = 0;
+		int XtoUse = 0;
+		int disparityToUse = 0;
+		double distanceObj = 0;
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	//Testing Radar--------
 	//Radar info
 /*	Radar radar;

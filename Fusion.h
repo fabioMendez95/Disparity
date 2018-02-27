@@ -20,10 +20,15 @@ public:
 	void setValuesFusion(int minX, int minY, Size s);
 	Mat displayOnImage(Mat& Image);
 
+	void pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vector<double> displacements);
 	vector<ObjectDR> getObjects();
+
+	void dontShow();
 
 private:
 	double errorValue = 0.1;
+
+	bool showFusionProcess = true;
 
 	int xDown;
 	int xUp;
@@ -38,7 +43,9 @@ private:
 	int widthOfObject(Mat disparity, int x);
 	ObjectDR getObjectDimensions(Mat disparity, int width, int x);
 
-	int pixelError = 2;
+	double getXcooMeters(double Dos, double displacement);
+
+	int pixelError = 3;
 
 	vector<ObjectDR> objects;
 

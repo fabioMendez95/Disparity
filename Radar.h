@@ -27,11 +27,14 @@ public:
 
 	int getDataPointNum();
 	vector<double> distanceToSB;
+	vector<double> xCoordinates;
 
-	void setData(int distanceToSB);
+	void setData(double distanceToSBNum);
 private:
-	int Rts = 0;
+	double Rts = 0;
 	int dataPointNum = 0;
+
+	void concatenateInfo(char& readInfo, int bytes_read);
 
 	//Variable initialization
 	int fd;

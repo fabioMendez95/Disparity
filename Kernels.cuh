@@ -13,11 +13,11 @@ struct pointCoo{
 	int x,y;
 };
 
-#define p1 10//5  //10
-#define p2 250//200//1000 //150
+#define p1 5//5  //10
+#define p2 100//200//1000 //150
 
 
-#define maxDisparity 250
+#define maxDisparity 80//200 //100 or 150 is the best, 80 is better for longer distances
 
 //Kernel 1 main
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* L, int* image);

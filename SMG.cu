@@ -28,13 +28,17 @@ using namespace cv;
 
 #define threadx 16
 #define thready 16
-#define CamDevice 1
+#define CamDevice 0
 
 
 #define SAVEIMAGE false
 #define Profile true
 
-#define DISPLAY true
+#define SAVERESULTS false
+
+#define DISPLAY false
+#define SHOWFUSION true
+#define DISPLAYDisparity true
 
 #define USERADAR true
 #define USECAMARA true
@@ -57,6 +61,7 @@ bool readCameraB = true;
 mutex radarMtx;
 mutex readCameraMtx;
 vector<double> radarToSB;
+vector<double> SBDisplacements;
 Fusion fus;
 
 
@@ -78,7 +83,7 @@ __host__ void radarThread(){
 		correctlyRead = radar.readInfo();
 	}*/
 	Radar radar;
-	radar.setData(0.009+0.0028);
+	radar.setData((0.006+0.0028));
 	radar.startRadar();
 	bool copyReadRadar = true;
 	while(copyReadRadar){
@@ -86,6 +91,7 @@ __host__ void radarThread(){
 		radarMtx.lock();
 		copyReadRadar = readRadar;
 		radarToSB = radar.distanceToSB;
+		SBDisplacements = radar.xCoordinates;
 		radarMtx.unlock();
 	}
 	radar.closeRadar();
@@ -112,6 +118,10 @@ __host__ void SGM(){
 
 
 	cout << "Starting process \n";
+
+#if !SHOWFUSION
+	fus.dontShow();
+#endif
 
 	//Radar Info
 #if USERADAR
@@ -304,7 +314,7 @@ __host__ void SGM(){
 		//------------Done-First-Kernel-----------------------------
 
 		Mat disparity = DisparityCreation(disFromKernel,widthR,lengthR);
-#if DISPLAY
+#if DISPLAYDisparity
 		//Display Logic----------------------------------
 		namedWindow("Disparity");
 		Mat display;
@@ -313,18 +323,17 @@ __host__ void SGM(){
 		// b=realted to disparity
 		//bilateralFilter(disparity,disparity2,3,2,2);
 		//radarPointsInImage(disparity2);
-#if USECAMARA && USERADAR
-		fus.radarPointsInImage(disparity,radarToSB);
-		namedWindow("Fusion");
-		Mat fusion = fus.displayOnImage(showLeft);
-		imshow("Fusion",fusion);
-#endif
 		double minVal, maxVal;
 		minMaxIdx(disparity, &minVal, &maxVal);
 		disparity.convertTo(display, CV_8UC3, 255 / (maxVal), minVal);
-		applyColorMap(display,display,COLORMAP_HOT);
+		applyColorMap(display,display,COLORMAP_JET);
 		resize(display,display,size);
 		imshow("Disparity", display);
+#if SAVERESULTS
+		ostringstream imageSaveLocation2;
+				imageSaveLocation2 << "Disparity/" << frame << ".png";
+				imwrite(imageSaveLocation2.str(), display);
+#endif
 		//Done Display Logic-----------------------------
 #endif
 		//----> Radar point fetch should be done here <---- TODO
@@ -340,6 +349,21 @@ __host__ void SGM(){
 
 		//Second Kernel, Semi global matching and disparity Selection---------
 		KernelSemiGlobal<<<dimGrid2,dimBlock2>>>(costK,widthR,lengthR,initialInfoToKernel,L1); //new Copy L1
+
+
+#if USECAMARA && USERADAR
+		//fus.radarPointsInImage(disparity,radarToSB);
+		fus.pointMatchOnImage(disparity,radarToSB,SBDisplacements);
+		namedWindow("Fusion");
+		Mat showLeft2 = cam.getUnfilterLeft();
+		Mat fusion = fus.displayOnImage(showLeft2);
+		imshow("Fusion",fusion);
+#if SAVERESULTS
+		ostringstream imageSaveLocation;
+		imageSaveLocation << "Fusion/" << frame << ".png";
+		imwrite(imageSaveLocation.str(), fusion);
+#endif
+#endif
 
 		int syncStatus = cudaDeviceSynchronize();
 #if Profile

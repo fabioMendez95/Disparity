@@ -55,6 +55,7 @@ void Camera::initCamera(int device){
 		            Size(imageWidth,imageHeight), CV_16SC2, map1R, map2R);
 
 	cvDestroyWindow("Image: ESC to continue");
+	//cvDestroyAllWindows();
 }
 
 StereoPair Camera::getImages(){
@@ -88,13 +89,13 @@ Mat Camera::getUnfilterRight(){
 Mat Camera::getLeft(){
 	remap(left,rviewL,map1L,map2L,INTER_LINEAR);
 	rviewL.copyTo(leftUnfilter);
-	resize(rviewL,rviewL,Size(160,120));//320,240  160,120 1280,720
+	resize(rviewL,rviewL,Size(320,240));//320,240  160,120 1280,720
 	return rviewL;
 }
 Mat Camera::getRight(){
 	remap(rigth,rviewR,map1R,map2R,INTER_LINEAR);
 	rviewR.copyTo(rigthUnfilter);
-	resize(rviewR,rviewR,Size(160,120));//320,240
+	resize(rviewR,rviewR,Size(320,240));//320,240
 	return rviewR;
 }
 
