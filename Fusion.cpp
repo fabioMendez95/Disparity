@@ -14,6 +14,7 @@ void Fusion::pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vecto
 	Mat disparity = getFilterImage(disparitySrc);
 	Mat display;
 
+	//vector<DivisionImage> divisions = getDisivionOnImage(disparity);
 	objects.clear();
 
 	if (showFusionProcess) {
@@ -26,36 +27,38 @@ void Fusion::pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vecto
 	vector<double> displace = displacements;
 	objects.clear();
 	int num = 0;
-	cout << "Sanity check: " << (radarToSB.size() == displacements.size()) <<endl;
+	cout << "Sanity check: " << (radarToSB.size() == displacements.size()) <<endl << radarToSB.size() << " " << displacements.size() << endl;
 	for(double distance : local){
 		double xCoordinate = (getXcooMeters(distance,displace.at(num))/(0.004)/xRep);
-		double xFull = getXcooMeters(distance,displace.at(num))/0.000004;
-		int x = (int)round(xCoordinate/0.001);
+		int x = (int)floor(xCoordinate/0.001); //X coordante on image
+
 	//	cout <<" distance: " << distance << " at: " << x << " (" << xCoordinate << ") " << "displacement "<< displace.at(num)<< " xMeters " << getXcooMeters(distance,displace.at(num))
-	//			<<" on complete Image " << xFull << endl;
+	//		 << endl;
+
+		//cout << displace.at(num) + 0.06 << " "<<distance <<endl;
 		if(x<disparity.cols && x > 0){
-		double Z = 336 / ((double)((int)disparity.at<uchar>(radarLine,x))*0.004*xRep);
-		Z = Z/1000;
-		num ++;
+			double Z = 336
+					/ ((double) ((int) disparity.at<uchar>(radarLine, x))
+							* 0.004 * xRep);
+			Z = Z / 1000;
 
-		if(fabs(distance - Z) <= 0.1){
-			cout << "Match " << distance << " " <<Z <<endl;
-			ObjectDR obj;
-			obj.centre = Point(x,radarLine);
-			obj.distance = distance;
-			obj.length=20;
-			obj.width = 20;
-			objects.push_back(obj);
-		}
+			if (distance < 4/*fabs(Z-distance) <= 0.5*/) {
+				//create Objects
+				cout << "Match " << distance << " on image: " << Z << " " << x << endl;
+				int width = widthOfObject(disparity, x);
+				ObjectDR obj;
+				obj.centre = Point(x, radarLine);
+				obj.distance = distance;
+				obj.length = 50;
+				obj.width = 50;
+				objects.push_back(obj);
+			}
 
-		if (showFusionProcess) {
-			circle(display, Point(x, radarLine), 5, Scalar(255, 0, 0), -1, 1);
-			/*line(display, Point(x, radarLine), Point(x + width, radarLine),
-					Scalar(0, 0, 0), 2);
-			line(display, Point(x + width / 2, radarLine - obj.length / 2),
-					Point(x + width / 2, radarLine + obj.length / 2),
-					Scalar(0, 0, 0), 2);*/
-		}
+			num ++;
+
+			if (showFusionProcess) {
+				circle(display, Point(x, radarLine), 5, Scalar(255, 0, 0), -1, 1);
+			}
 		}
 	}
 
@@ -90,82 +93,83 @@ double Fusion::getXcooMeters(double Dos, double displacement){//Dos in meters
 	double d     = 0.0028 / sin(alpha);
 	double x     = d * sin(beta)/sin(importantAngle);
 
-	/*double beta  = atan2(Dos,Dcr);
-	double alpha = M_PI - (beta +  0.6108652382); // 30 in rad
-	double df    = 0.0028 / sin(beta);
-
-	return (sin(alpha) * df / sin(0.6108652382));
-	*/
 	return x;
 }
 
-void Fusion::radarPointsInImage(Mat disparitySrc, vector<double> radarToSB){
-	Mat disparity = getFilterImage(disparitySrc);
-	Mat display;
-
-	if (showFusionProcess) {
-		double minVal, maxVal;
-		minMaxIdx(disparitySrc, &minVal, &maxVal);
-		disparity.convertTo(display, CV_8UC3, 255 / (maxVal), minVal);
-	}
-	radarLine = disparity.rows / 2;
-	vector<double> local = radarToSB;
-	objects.clear();
-
-	for(int x = 0; x < disparity.cols; x++){
-		double Z = 336 / ((double)((int)disparity.at<uchar>(radarLine,x))*0.004*xRep);
-		Z = Z/1000;
-		//cout << "Distance " << Z << endl;
-		int num = 0;
-
-		int toDelete = 0;
-		int XtoUse = 0;
-		double distanceObj = 0;
-		double mimDifference = 10;
-		bool match = false;
-
-		cout <<"\nZ: " << Z <<" Size: " << local.size()  <<endl;
-		if(!local.empty()){
-		for(double distance : local){
-			cout << distance << " ";
-			double difference = fabs(Z - distance);
-			if (difference < mimDifference && difference <= errorValue) {
-				cout << "Match: " << distance << endl;
-				mimDifference = difference;
-				toDelete = num;
-				XtoUse = x;
-				distanceObj = distance;
-				match = true;
+vector<DivisionImage> Fusion::getDisivionOnImage(Mat disparity){
+	vector<DivisionImage> divisions;
+	for(int x=0;x<disparity.cols;x++){
+		DivisionImage segment;
+		segment.startX = x;
+		int widthSegment = 0;
+		int disparityValue =  disparity.at<uchar>(radarLine,x);
+		int extraCount = 0;
+		for(int x2=x+1;x2<disparity.cols;x2++){
+			int disparyValueComp = disparity.at<uchar>(radarLine,x2);
+			if(abs(disparityValue - disparyValueComp) <= pixelError){
+				widthSegment = x2 - x;
+				segment.endX = x2;
+				extraCount = 0;
 			}
-			num ++;
-		}
-
-		if(match){
-			int width = widthOfObject(disparity, XtoUse);
-			ObjectDR obj = getObjectDimensions(disparity, width, XtoUse);
-			local.erase(local.begin() + toDelete);
-			obj.distance = distanceObj;
-			objects.push_back(obj);
-			if (showFusionProcess) {
-				circle(display, Point(x, radarLine), 5, Scalar(255, 0, 0), -1,
-						3);
-				line(display, Point(x, radarLine), Point(x + width, radarLine),
-						Scalar(0, 0, 0), 2);
-				line(display, Point(x + width / 2, radarLine - obj.length / 2),
-						Point(x + width / 2, radarLine + obj.length / 2),
-						Scalar(0, 0, 0), 2);
+			else if(extraCount == 1){
+				break;
 			}
-			x = x + width;
+			else{
+				extraCount ++;
+			}
 		}
+		if (widthSegment > 5){
+		getObjectLength(disparity,segment);
+		x = x + widthSegment;
+
+		cout << segment.startX << " " << segment.startY << " " <<segment.endX << " " <<segment.endY << endl;
+		divisions.push_back(segment);
 		}
 	}
 
-	if(showFusionProcess){
-		applyColorMap(display, display, COLORMAP_HOT);
-		resize(display, display, size);
-		namedWindow("Radar and Disparity");
-		imshow("Radar and Disparity", display);
+	drawSegments(disparity,divisions);
+
+	return divisions;
+}
+
+void Fusion::drawSegments(Mat disparity, vector<DivisionImage> segments){
+	for(DivisionImage segment : segments) {
+		Point pt1(segment.startX,segment.startY);
+		Point pt2(segment.endX,segment.endY);
+		rectangle(disparity,pt1,pt2,Scalar(0,255,0),2);
 	}
+}
+
+void Fusion::getObjectLength(Mat disparity, DivisionImage& segment){
+	int midObject = segment.startX + int((segment.endX - segment.startX) / 2);
+	//cout << midObject << " this " << (segment.endX - segment.startX) << " " << segment.startX << " "<< segment.endX << endl;
+	int disparityValue = disparity.at<uchar>(radarLine, midObject);
+	bool checkUp = true;
+	bool checkDown = true;
+	int ycD = radarLine + 1;
+	int ycU = radarLine - 1;
+
+	while (ycD < disparity.rows || ycU > 0) {
+		int disparityValueUp = disparity.at<uchar>(ycU, midObject);
+		int disparityValueDown = disparity.at<uchar>(ycD, midObject);
+		if (abs(disparityValue-disparityValueUp) <= pixelError
+				&& checkUp && ycU > 0) {
+			ycU--;
+		} else {
+			checkUp = false;
+		}
+		if (abs(disparityValue - disparityValueDown) <= pixelError
+				&& checkDown && ycD < disparity.rows) {
+			ycD++;
+		} else {
+			checkDown = false;
+		}
+		if (!checkDown && !checkUp) {
+			break;
+		}
+	}
+	segment.startY = ycU;
+	segment.endY = ycD;
 }
 
 Mat Fusion::displayOnImage(Mat& image){
@@ -189,50 +193,6 @@ vector<ObjectDR> Fusion::getObjects(){
 	return objects;
 }
 
-ObjectDR Fusion::getObjectDimensions(Mat disparity, int width, int x){
-	ObjectDR result; //width, length, Point centre
-	int midObject = x + width/2;
-	int disparityValue = disparity.at<uchar>(radarLine,midObject); //maybe use x
-
-	bool checkUp = true;
-	bool checkDown = true;
-	result.centre.x = midObject;
-	result.width = width;
-
-	int ycD = radarLine+1;
-	int ycU = radarLine-1;
-	int length = 0;
-	int centreY = radarLine;
-	while(ycD < disparity.rows && ycU > 0){
-		int disparityValueUp = disparity.at<uchar>(ycU,midObject);
-		int disparityValueDown = disparity.at<uchar>(ycD,midObject);
-		if ((disparityValue < disparityValueUp + pixelError && disparityValue > disparityValueUp - pixelError) && checkUp) {
-			length ++;
-			centreY --;
-		}
-		else{
-			checkUp = false;
-		}
-		if ((disparityValue < disparityValueDown + pixelError && disparityValue > disparityValueDown - pixelError) && checkDown) {
-			width = width + 1;
-			length ++;
-			centreY ++;
-		}
-		else{
-			checkDown = false;
-		}
-		if(!checkDown && !checkUp){
-			break;
-		}
-		ycD ++;
-		ycU --;
-	}
-	result.length = length;
-	result.centre.y = centreY;
-
-	return result;
-}
-
 int Fusion::widthOfObject(Mat disparity, int x){
 	int disparityValue = disparity.at<uchar>(radarLine,x);
 	int width = 0;
@@ -251,7 +211,12 @@ int Fusion::widthOfObject(Mat disparity, int x){
 
 Mat Fusion::getFilterImage(Mat disparitySrc){
 	Mat disparity2;
-	bilateralFilter(disparitySrc,disparity2,9,10,10);
+	Mat kernel;
+	int kernelSize = 20;
+	kernel = Mat::ones(Size(kernelSize,kernelSize),CV_32F)/(float)(kernelSize*kernelSize);
+	filter2D(disparitySrc,disparity2,-1,kernel,Point(-1,-1),0,BORDER_DEFAULT);
+	//bilateralFilter(disparitySrc,disparity2,5,10,5);
+	//disparitySrc.copyTo(disparity2);
 	return disparity2;
 }
 

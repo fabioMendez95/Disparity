@@ -12,6 +12,14 @@ struct ObjectDR{
 	int length;
 	Point centre;
 	double distance;
+	int pointsInside;
+};
+
+struct DivisionImage{
+	int startX;
+	int endX;
+	int startY;
+	int endY;
 };
 
 class Fusion{
@@ -41,13 +49,15 @@ private:
 	int radarLine;
 	Mat getFilterImage(Mat disparitySrc);
 	int widthOfObject(Mat disparity, int x);
-	ObjectDR getObjectDimensions(Mat disparity, int width, int x);
 
 	double getXcooMeters(double Dos, double displacement);
 
-	int pixelError = 3;
+	int pixelError = 2;
 
 	vector<ObjectDR> objects;
+	vector<DivisionImage> getDisivionOnImage(Mat disparity);
+	void getObjectLength(Mat disparity, DivisionImage& segment);
+	void drawSegments(Mat disparity, vector<DivisionImage> segments);
 
 	Size size;
 };

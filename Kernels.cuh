@@ -14,10 +14,10 @@ struct pointCoo{
 };
 
 #define p1 5//5  //10
-#define p2 100//200//1000 //150
+#define p2 100//100
 
 
-#define maxDisparity 80//200 //100 or 150 is the best, 80 is better for longer distances
+#define maxDisparity 100//200 //100 or 150 is the best, 80 is better for longer distances
 
 //Kernel 1 main
 __global__ void KernelDisparityCalculations(int boxCostX, int boxCostY, unsigned int* censusLa, unsigned int* censusRa,int widthImage, int lenImage, uchar* leftI, uchar* rightI, int* L, int* image);
@@ -85,7 +85,6 @@ __device__ void AggregateCostKernel(int* cost, int width, int length, startInfo 
 	while(!done){
 		int minimum = 8888;
 		if(influenceX < 0 || influenceY < 0 || influenceY >= length ||influenceX >= width ){ //This line is different, less checks
-
 			for(int d=startD; d<endD; d++){
 				int costPixel = cost[width*(y+d*(length))+x];
 				L[width*(y+d*(length))+x] = L[width*(y+d*(length))+x] + costPixel;
@@ -192,7 +191,7 @@ __device__ void CostComputationKernelAndDisparitySelection(unsigned int* censusL
 			valueToAssigned = HammingDistanceKernel(valueLeft, valueRight);
 
 			//Disparity Selection
-			if (value < minimum) {
+			if (value <= minimum) {
 				minimum = value;
 				disToAssign = dis;
 			}

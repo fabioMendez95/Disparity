@@ -326,7 +326,7 @@ __host__ void SGM(){
 		double minVal, maxVal;
 		minMaxIdx(disparity, &minVal, &maxVal);
 		disparity.convertTo(display, CV_8UC3, 255 / (maxVal), minVal);
-		applyColorMap(display,display,COLORMAP_JET);
+		applyColorMap(display,display,COLORMAP_HOT);
 		resize(display,display,size);
 		imshow("Disparity", display);
 #if SAVERESULTS

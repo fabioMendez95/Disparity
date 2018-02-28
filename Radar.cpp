@@ -89,7 +89,7 @@ int Radar::readInfo(){
 	//Reading Header-------------------------------------------------------------
 	char read_buffer[1824]; /* Buffer to store the data received              */
 	memset(read_buffer,0,1824);
-	size_t bytes_read= 0, bytes_expected = 1824;
+	size_t bytes_read= 0, bytes_expected = 1024;
 
 	do {
 	  ssize_t result = read(fd, read_buffer + bytes_read, bytes_expected - bytes_read);
@@ -109,7 +109,13 @@ int Radar::readInfo(){
 	  }
 	  //cout << endl;
 	  if(pass){
+		  unsigned int packetLength = 0;
+		  	for (int i = 15; i >= 12; i--) {
+		  		packetLength <<= 8;
+		  		packetLength = packetLength + (int) read_buffer[i];
+		  	}
 		  bytes_read+= result; //should not increase until magic word
+		  bytes_expected = packetLength;
 	  }
 	} while (bytes_read < bytes_expected);
 
@@ -207,7 +213,7 @@ int Radar::readInfo(){
 	dataPointNum = detectedObjects;
 	distanceToSB.clear();
 	xCoordinates.clear();
-	cout << "Number Num: " << detectedObjects << " \n";
+	//cout << "Number Num: " << detectedObjects << " \n";
 	for (int obj = 0; obj < detectedObjects; obj++) {
 		//cout << "Byte: " << byteToReadB << "\n ";
 		//cout << "\nObject Number " << obj << " :\n";
@@ -281,8 +287,8 @@ int Radar::readInfo(){
 				ang = M_PI - ang;
 			}
 			distanceToSB.push_back(getDistancePointToStereo(mag,ang));
-			xCoordinates.push_back(mag*cos(ang));
-			cout << "Point: " << xCoo << " " << yCoo <<" \tPolar Coo: "<< mag << ' ' << (ang*180/M_PI) << " \tDistance to SB: " << getDistancePointToStereo(mag,ang)<<endl;
+			xCoordinates.push_back(xCoo);
+			//cout << "Point: " << xCoo << " " << yCoo <<" \tPolar Coo: "<< mag << ' ' << (ang*180/M_PI) << " \tDistance to SB: " << getDistancePointToStereo(mag,ang)<<endl;
 		//}
 		/*else{
 			union {
