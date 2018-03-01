@@ -42,7 +42,7 @@ void Fusion::pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vecto
 							* 0.004 * xRep);
 			Z = Z / 1000;
 
-			if (distance < 4/*fabs(Z-distance) <= 0.5*/) {
+			if (/*distance < 4 && distance > 0.1*/fabs(Z-distance) <= 0.5) {
 				//create Objects
 				cout << "Match " << distance << " on image: " << Z << " " << x << endl;
 				int width = widthOfObject(disparity, x);

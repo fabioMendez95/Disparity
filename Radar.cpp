@@ -16,12 +16,15 @@
 #include <iomanip> // setprecision
 #include <sstream> // stringstream
 #include<math.h>
+#include<map>
+#include "opencv2/core/core.hpp"
 
-#define DATA_PORT "/dev/ttyACM1"
+#define DATA_PORT "/dev/ttyACM3"
 #define BAUD_RATE 921600
 
 
 using namespace std;
+using namespace cv;
 
 void Radar::startRadar(){
 	fd = open(DATA_PORT,  O_RDWR | O_NOCTTY | O_SYNC);
@@ -84,8 +87,8 @@ void concatenateInfo(char& readInfo, int bytes_read){
 
 //returns 1 if the data was read correctly, 0 otherwise
 int Radar::readInfo(){
+	//fd = open(DATA_PORT,  O_RDWR | O_NOCTTY | O_SYNC);
 	tcflush(fd, TCIFLUSH); /* Discards old data in the rx buffer            */
-
 	//Reading Header-------------------------------------------------------------
 	char read_buffer[1824]; /* Buffer to store the data received              */
 	memset(read_buffer,0,1824);
@@ -119,32 +122,6 @@ int Radar::readInfo(){
 	  }
 	} while (bytes_read < bytes_expected);
 
-	//int bytes_read = 0; /* Number of bytes read by the read() system call */
-	//bytes_read = read(fd, &read_buffer, sizeof(read_buffer));
-/*	printf("\n\n +----------------------------------+");
-	printf("\n\nTotal bytes: %d", bytes_read);  //Print the number of bytes read
-	printf("\n\n");*/
-
-	//reading magicWord
-	//cout << "Magic Word: ";
-	bool pass = true;
-	for (int i = 0; i < 8; i++){ /*printing only the received characters*/
-		//printf("%d ", read_buffer[i]);
-		pass = pass && checkMagicWord(read_buffer[i],i);
-	}
-	//cout << endl;
-	if(!pass){
-		return 0;
-	}
-
-
-	unsigned int packetLength = 0;
-	for (int i = 15; i >= 12; i--) {
-		packetLength <<= 8;
-		packetLength = packetLength + (int) read_buffer[i];
-	}
-	//cout << "PacketLength: " << packetLength <<endl;
-
 	unsigned int detectedObjects = 0;
 	for (int i = 31; i >= 28; i--) {
 		detectedObjects <<= 8;
@@ -152,8 +129,6 @@ int Radar::readInfo(){
 		//cout << (int) read_buffer[i] << " ";
 	}
 	//cout << "Number of Detected Objects: " << detectedObjects << endl;
-
-
 
 	//printf("\n +----------------------------------+ \n\n");
 	//Reading  Detected Objects ----------------------------------------------------------
@@ -197,10 +172,6 @@ int Radar::readInfo(){
 	//cout << "Descriptor XYZ Q format: " << pow(2, Descriptor2) << endl;
 	float xyzQ = (float) pow((float) 2, (float) (Descriptor2));
 	byteToReadB = byteToReadB + 2;
-	//cout << "Starting location Read byte: " << byteToReadB << endl;
-	//cout << "\nObject Information: \n";
-	//This area depends on the number of Objects detected
-	//Reading detected objects Range, doppler, peak, x,y,z each 2 bytes
 
 	//data to be send ---------------
 #if VISUAL
@@ -213,59 +184,10 @@ int Radar::readInfo(){
 	dataPointNum = detectedObjects;
 	distanceToSB.clear();
 	xCoordinates.clear();
+	map<PointD, int> labels;
+	vector<PointD> DB;
 	//cout << "Number Num: " << detectedObjects << " \n";
 	for (int obj = 0; obj < detectedObjects; obj++) {
-		//cout << "Byte: " << byteToReadB << "\n ";
-		//cout << "\nObject Number " << obj << " :\n";
-		unsigned int range = 0;
-		unsigned int doppler = 0;
-		unsigned int peak = 0;
-		int x = 0;
-		int y = 0;
-		int z = 0;
-
-		//reading range
-		for (int i = byteToReadB + 1; i >= byteToReadB; i--) {
-			range <<= 8;
-			range = range + (unsigned int) read_buffer[i];
-			//cout << (int) read_buffer[i] << " ";
-		}
-		//cout << "Range: " << range << endl;
-
-		for (int i = byteToReadB + 3; i >= byteToReadB + 2; i--) {
-			doppler <<= 8;
-			doppler = doppler + (int) read_buffer[i];
-			//cout << (int) read_buffer[i] << " ";
-		}
-		//cout << "Doopler: " << doppler << endl;
-
-		for (int i = byteToReadB + 5; i >= byteToReadB + 4; i--) {
-			peak <<= 8;
-			peak = peak + (int) read_buffer[i];
-			//cout << (int) read_buffer[i] << " ";
-		}
-		//cout << "Peak: " << peak << endl;
-
-		//Points
-		/*for (int i = byteToReadB + 7; i >= byteToReadB + 6; i--) {
-			x <<= 8;
-			x = x + (int) read_buffer[i];
-			//cout << (int) read_buffer[i] << " ";
-		}
-		for (int i = byteToReadB + 9; i >= byteToReadB + 8; i--) {
-			y <<= 8;
-			y = y + (int) read_buffer[i];
-			//cout << (int) read_buffer[i] << " ";
-		}*/
-		for (int i = byteToReadB + 11; i >= byteToReadB + 10; i--) {
-			z <<= 8;
-			z = z + (int) read_buffer[i];
-			//cout << (int) read_buffer[i] << " ";
-		}
-
-		//float xCoo = ((float) x) / xyzQ;
-		//float yCoo = ((float) y) / xyzQ;
-
 		union {
 			char chars[2];
 			int16_t in;
@@ -279,34 +201,19 @@ int Radar::readInfo(){
 		u2.chars[1] = read_buffer[byteToReadB + 9];
 		float yCoo = float(u2.in) / xyzQ;
 
-		//Polar Coordinates
-		//if(yCoo >= 0){
-			double mag = sqrt(xCoo*xCoo + yCoo*yCoo);
-			double ang = atan2(yCoo,xCoo);
-			if(xCoo < 0){
-				ang = M_PI - ang;
-			}
-			distanceToSB.push_back(getDistancePointToStereo(mag,ang));
-			xCoordinates.push_back(xCoo);
-			//cout << "Point: " << xCoo << " " << yCoo <<" \tPolar Coo: "<< mag << ' ' << (ang*180/M_PI) << " \tDistance to SB: " << getDistancePointToStereo(mag,ang)<<endl;
-		//}
-		/*else{
-			union {
-			  char chars[2];
-			  float f;
-			} u;
-			u.chars[0] = read_buffer[byteToReadB+9];
-			u.chars[1] = read_buffer[byteToReadB+8];
-			y = u.f/xyzQ;
-			uint16_t y = float((read_buffer[byteToReadB+8] << 8) + read_buffer[byteToReadB+9]);
-			cout << "Y: " << y/xyzQ << " " <<(float)y/xyzQ << " " << u.f/xyzQ << "\t";
-			for(int i = byteToReadB; i <= byteToReadB + 11; i++){
+		double mag = sqrt(xCoo * xCoo + yCoo * yCoo);
+		double ang = atan2(yCoo, xCoo);
+		if (xCoo < 0) {
+			ang = M_PI - ang;
+		}
+		distanceToSB.push_back(getDistancePointToStereo(mag, ang));
+		xCoordinates.push_back(xCoo);
+		PointD p;
+		p.x = xCoo;
+		p.y = yCoo;
+		DB.push_back(p);
+		labels.insert(pair<PointD,int>(p,-1));
 
-				cout << (uint16_t) read_buffer[i] << " ";
-			}
-			cout << " wrong \n";
-		}*/
-		//cout << "Coordinates: " << xCoo << " " << yCoo << " " << (float) (z / Descriptor2) << " End byte "<< (byteToReadB + 12) <<endl;
 		byteToReadB = byteToReadB + 12;
 #if VISUAL
 		stream << "\n";
@@ -315,6 +222,10 @@ int Radar::readInfo(){
 		stream << fixed << setprecision(7) << yCoo;
 #endif
 	}
+
+	//DBSCAN
+	DBSCAN(DB,dbscanEPS,minClusterSize,labels);
+	showClusterResults(labels);
 #if VISUAL
 	string SendInfo = stream.str();
 	write(fdf, SendInfo.c_str(), SendInfo.length());
@@ -323,6 +234,71 @@ int Radar::readInfo(){
 #endif
 	//cout << "done Passing info \n";
 	return 1;
+}
+
+
+void Radar::DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &labels){
+	int C = 0;
+	for(PointD p : DB){
+		if(labels.at(p) == -1){ //unvisited Nodes
+			labels.at(p) = 0; //mark as visited
+			vector<PointD> sphere_points = RangeQuery(DB,p,eps);
+			if(sphere_points.size() >= minPts){
+				C++;
+				expandCluster(p,sphere_points,C,eps,minPts,labels,DB);
+			}
+		}
+	}
+}
+
+void Radar::expandCluster(PointD P, vector<PointD> sphere_points, int C, double eps, int minPts, map<PointD, int> &labels, vector<PointD> DB){
+	labels.at(P) = C;
+	int size = sphere_points.size();
+	for(int i=0;i<size;i++){//for(PointD Pp : sphere_points){
+		PointD Pp = sphere_points.at(i);
+		if(labels.at(Pp) == -1){
+			labels.at(Pp) = 0;
+			vector<PointD> sphere_points_2 = RangeQuery(DB,Pp,eps);
+			if(sphere_points_2.size() >= minPts){
+				//sphere_points.insert(sphere_points.end(),sphere_points_2.begin(),sphere_points_2.end());
+				expandVector(sphere_points,sphere_points_2);
+				size = size + sphere_points_2.size();
+			}
+			labels.at(Pp) = C;
+		}
+	}
+}
+
+void Radar::expandVector(vector<PointD> &toExpand, vector<PointD> adder){
+	for(PointD item : adder){
+		toExpand.push_back(item);
+	}
+}
+
+//Finds neighbour clusters
+vector<PointD> Radar::RangeQuery(vector<PointD> DB, PointD Q,double eps){
+	vector<PointD> Neighbours;
+	for(PointD p : DB){
+		double distance = EuclidianDistance(Q,p);
+		if(distance <= eps){
+			Neighbours.push_back(p);
+		}
+	}
+	return Neighbours;
+}
+
+double Radar::EuclidianDistance(PointD a, PointD b){
+	return sqrt(pow((a.x - b.x),2)+ pow((a.y-b.y),2));
+}
+
+void Radar::showClusterResults(map<PointD,int> labels){
+	map<PointD, int>::iterator itr;
+	cout << "\nClustering Result : \n";
+	cout << "\tPointx\t y \tCluster\n";
+	for (itr = labels.begin(); itr != labels.end(); ++itr) {
+		cout << '\t' << itr->first.x<<" "<<itr->first.y << '\t' << itr->second << '\n';
+	}
+	cout << endl;
 }
 
 double Radar::getDistancePointToStereo(double mag, double ang){

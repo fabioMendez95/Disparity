@@ -13,10 +13,24 @@
 #include <sstream> // stringstream
 #include <vector>
 
+#include "opencv2/core/core.hpp"
+#include "map"
 
 #define VISUAL true
 
 using namespace std;
+using namespace cv;
+
+struct PointD{
+	double x,y;
+
+	bool operator==(const PointD &o) const{
+		return x == o.x && y == o.y;
+	}
+	bool operator<(const PointD o) const{
+		return x < o.x || (x == o.x && y < o.y);
+	}
+};
 
 class Radar{
 public:
@@ -31,6 +45,9 @@ public:
 
 	void setData(double distanceToSBNum);
 private:
+	double dbscanEPS = 0.1;
+	int minClusterSize = 5;
+
 	double Rts = 0;
 	int dataPointNum = 0;
 
@@ -47,7 +64,13 @@ private:
 
 	//Funcrtions
 	bool checkMagicWord(int readWord, int position);
-
 	double getDistancePointToStereo(double mag, double ang);
+
+	void DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &labels);
+	void expandCluster(PointD P, vector<PointD> sphere_points, int C, double eps, int minPts, map<PointD, int> &labels, vector<PointD> DB);
+	vector<PointD> RangeQuery(vector<PointD> DB, PointD Q,double eps);
+	double EuclidianDistance(PointD a, PointD b);
+	void showClusterResults(map<PointD,int> labels);
+	void expandVector(vector<PointD> &toExpand, vector<PointD> adder);
 
 };
