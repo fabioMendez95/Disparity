@@ -10,7 +10,7 @@
 using namespace std;
 using namespace cv;
 
-void Fusion::pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vector<double> displacements){
+void Fusion::pointMatchOnImage(Mat disparitySrc, vector<FusionInfo> fus){
 	Mat disparity = getFilterImage(disparitySrc);
 	Mat display;
 
@@ -22,14 +22,14 @@ void Fusion::pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vecto
 		minMaxIdx(disparitySrc, &minVal, &maxVal);
 		disparity.convertTo(display, CV_8UC3, 255 / (maxVal), minVal);
 	}
+
 	radarLine = disparity.rows / 2;
-	vector<double> local = radarToSB;
-	vector<double> displace = displacements;
+	vector<FusionInfo> local = fus;
 	objects.clear();
 	int num = 0;
-	cout << "Sanity check: " << (radarToSB.size() == displacements.size()) <<endl << radarToSB.size() << " " << displacements.size() << endl;
-	for(double distance : local){
-		double xCoordinate = (getXcooMeters(distance,displace.at(num))/(0.004)/xRep);
+	//cout << "Sanity check: " << (radarToSB.size() == displacements.size()) <<endl << radarToSB.size() << " " << displacements.size() << endl;
+	for(FusionInfo f : local){
+		double xCoordinate = (getXcooMeters(f.distanceToSB,f.displacement)/(0.004)/xRep);
 		int x = (int)floor(xCoordinate/0.001); //X coordante on image
 
 	//	cout <<" distance: " << distance << " at: " << x << " (" << xCoordinate << ") " << "displacement "<< displace.at(num)<< " xMeters " << getXcooMeters(distance,displace.at(num))
@@ -38,17 +38,16 @@ void Fusion::pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vecto
 		//cout << displace.at(num) + 0.06 << " "<<distance <<endl;
 		if(x<disparity.cols && x > 0){
 			double Z = 336
-					/ ((double) ((int) disparity.at<uchar>(radarLine, x))
-							* 0.004 * xRep);
+					/ ((double) ((int) disparity.at<uchar>(radarLine, x)) * 0.004 * xRep);
 			Z = Z / 1000;
 
-			if (/*distance < 4 && distance > 0.1*/fabs(Z-distance) <= 0.5) {
+			if (f.distanceToSB < 3 && f.distanceToSB > 0.1) {
 				//create Objects
-				cout << "Match " << distance << " on image: " << Z << " " << x << endl;
+				cout << "Match " << f.distanceToSB << " on image: " << Z << " " << x << endl;
 				int width = widthOfObject(disparity, x);
 				ObjectDR obj;
 				obj.centre = Point(x, radarLine);
-				obj.distance = distance;
+				obj.distance = f.distanceToSB;
 				obj.length = 50;
 				obj.width = 50;
 				objects.push_back(obj);

@@ -13,8 +13,8 @@ class visualRadar:
     fig = plt.figure()
     ax = fig.add_subplot(111)
     figNumber = 0
-    fileName = "SaveData/radar"
-    saveData = False
+    fileName = "radar"
+    saveData = True
 
     def readPipe(self): 
         fifo = open(self.path,'r')
@@ -25,14 +25,10 @@ class visualRadar:
     def getArray(self, data):
         infoFromProgram = data.split("\n")
         pointNum = int(infoFromProgram[0])
-        saveData = int(infoFromProgram[1])
-        print saveData
-        if(saveData == 1):
-            self.saveData = True
         print pointNum
         #print "This "
         #print len(infoFromProgram)
-        pointsStr = (infoFromProgram[2:])
+        pointsStr = (infoFromProgram[1:])
         #print len(pointsStr)
         #print '\n'
         pointArray = np.zeros(shape = (len(pointsStr)-1,3))
@@ -55,14 +51,8 @@ class visualRadar:
         #self.ax.legend(loc=4)
         self.ax.grid(True)
         
-
         plt.show()
         self.fig.canvas.draw()
-        if(self.saveData):
-            saveName = self.fileName + `self.figNumber` + ".png"
-            print saveName
-            self.figNumber = self.figNumber + 1
-            self.fig.savefig(saveName)
         plt.cla()
     
     def getLegend(self,clusters):
@@ -74,9 +64,6 @@ class visualRadar:
 
 
     def visualisation(self):
-        #save = raw_input("Save on images (y/n)")
-        #if(save == 'y'):
-        #    self.saveData = True
         while True:
             try:
                 receivedData = self.readPipe()

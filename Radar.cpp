@@ -19,12 +19,16 @@
 #include<map>
 #include "opencv2/core/core.hpp"
 
-#define DATA_PORT "/dev/ttyACM3"
+#define DATA_PORT "/dev/ttyACM1"
 #define BAUD_RATE 921600
 
 
 using namespace std;
 using namespace cv;
+
+void Radar::saveImage(){
+	saveData = true;
+}
 
 void Radar::startRadar(){
 	fd = open(DATA_PORT,  O_RDWR | O_NOCTTY | O_SYNC);
@@ -175,16 +179,21 @@ int Radar::readInfo(){
 
 	//data to be send ---------------
 #if VISUAL
-	mkfifo(myfifo, 0666);
-	fdf = open(myfifo, O_WRONLY);
-
 	stringstream stream;
 	stream << detectedObjects;
+	stream << "\n";
+	if(saveData){
+		stream << 1;
+	}
+	else{
+		stream << 0;
+	}
 #endif
 	dataPointNum = detectedObjects;
-	distanceToSB.clear();
-	xCoordinates.clear();
-	map<PointD, int> labels;
+	//distanceToSB.clear();
+	//xCoordinates.clear();
+	fusion.clear();
+	labels.clear();
 	vector<PointD> DB;
 	//cout << "Number Num: " << detectedObjects << " \n";
 	for (int obj = 0; obj < detectedObjects; obj++) {
@@ -206,27 +215,42 @@ int Radar::readInfo(){
 		if (xCoo < 0) {
 			ang = M_PI - ang;
 		}
-		distanceToSB.push_back(getDistancePointToStereo(mag, ang));
-		xCoordinates.push_back(xCoo);
+		//distanceToSB.push_back(getDistancePointToStereo(mag, ang));
+		//xCoordinates.push_back(xCoo);
 		PointD p;
 		p.x = xCoo;
 		p.y = yCoo;
 		DB.push_back(p);
 		labels.insert(pair<PointD,int>(p,-1));
 
-		byteToReadB = byteToReadB + 12;
-#if VISUAL
-		stream << "\n";
-		stream << fixed << setprecision(7) << xCoo;
+		/*stream << "\n";
+		stream << fixed << setprecision(3) << xCoo;
 		stream << " ";
-		stream << fixed << setprecision(7) << yCoo;
-#endif
+		stream << fixed << setprecision(3) << yCoo;*/
+
+		byteToReadB = byteToReadB + 12;
 	}
 
 	//DBSCAN
-	DBSCAN(DB,dbscanEPS,minClusterSize,labels);
-	showClusterResults(labels);
+	int numberOfClusters = DBSCAN(DB,dbscanEPS,minClusterSize,labels);
+	//cout << "Number of clusters: " << numberOfClusters << endl;
+	vector<PointD> centroids = getCentroidsOfClusters(labels,numberOfClusters);
+	//showClusterResults(labels);
 #if VISUAL
+	map<PointD, int>::iterator itr;
+	for (itr = labels.begin(); itr != labels.end(); ++itr) {
+		stream << "\n";
+		stream << fixed << setprecision(3) << itr->first.x;
+		stream << " ";
+		stream << fixed << setprecision(3) << itr->first.y;
+		stream << " ";
+		stream << fixed << setprecision(3) << itr->second;
+	}
+
+	stream << "\n";
+	mkfifo(myfifo, 0666);
+	fdf = open(myfifo, O_WRONLY);
+	//cout << stream.str();
 	string SendInfo = stream.str();
 	write(fdf, SendInfo.c_str(), SendInfo.length());
 	close(fdf);
@@ -236,8 +260,45 @@ int Radar::readInfo(){
 	return 1;
 }
 
+vector<PointD> Radar::getCentroidsOfClusters(map<PointD,int> labelsMap, int numberOfClusters){
+	PointD initial;
+	initial.x = 0;
+	initial.y = 0;
+	vector<PointD> centroids(numberOfClusters,initial); //One cluster number is noise (0)
+	vector<int> pointsInCluster(numberOfClusters,0);
+	map<PointD, int>::iterator itr;
+	for (itr = labelsMap.begin(); itr != labelsMap.end(); ++itr) {
+		if(itr->second > 0){ //Part of a cluster, not noise
+			PointD current = centroids.at(itr->second -1);
+			current.x = current.x + itr->first.x;
+			current.y = current.y + itr->first.y;
+			centroids.at(itr->second-1) = current;
+			pointsInCluster.at(itr->second-1) =  pointsInCluster.at(itr->second-1) + 1;
+		}
+	}
+	for(int i=0; i<centroids.size();i++){
+		PointD cen = centroids.at(i);
+		int number = pointsInCluster.at(i);
+		cen.x = cen.x/number;
+		cen.y = cen.y/number;
+		centroids.at(i) = cen;
+		double mag = sqrt(cen.x*cen.x + cen.y*cen.y);
+		double ang = atan2(cen.y,cen.x);
+		if(cen.x < 0){
+			ang = M_PI - ang;
+		}
+		//distanceToSB.push_back(getDistancePointToStereo(mag, ang));
+		//xCoordinates.push_back(cen.x);
+		FusionInfo f;
+		f.displacement = cen.x;
+		f.distanceToSB = getDistancePointToStereo(mag, ang);
+		fusion.push_back(f);
 
-void Radar::DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &labels){
+	}
+	return centroids;
+}
+
+int Radar::DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &labels){
 	int C = 0;
 	for(PointD p : DB){
 		if(labels.at(p) == -1){ //unvisited Nodes
@@ -249,6 +310,7 @@ void Radar::DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &
 			}
 		}
 	}
+	return C;
 }
 
 void Radar::expandCluster(PointD P, vector<PointD> sphere_points, int C, double eps, int minPts, map<PointD, int> &labels, vector<PointD> DB){
@@ -299,6 +361,10 @@ void Radar::showClusterResults(map<PointD,int> labels){
 		cout << '\t' << itr->first.x<<" "<<itr->first.y << '\t' << itr->second << '\n';
 	}
 	cout << endl;
+}
+
+map<PointD, int> Radar::getLabelMap(){
+	return labels;
 }
 
 double Radar::getDistancePointToStereo(double mag, double ang){

@@ -3,6 +3,7 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/opencv.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
+#include "Radar.h"
 
 using namespace std;
 using namespace cv;
@@ -28,13 +29,13 @@ public:
 	void setValuesFusion(int minX, int minY, Size s);
 	Mat displayOnImage(Mat& Image);
 
-	void pointMatchOnImage(Mat disparitySrc, vector<double> radarToSB, vector<double> displacements);
+	void pointMatchOnImage(Mat disparitySrc, vector<FusionInfo> fus);
 	vector<ObjectDR> getObjects();
 
 	void dontShow();
 
 private:
-	double errorValue = 0.1;
+	double errorValue = 0.5;
 
 	bool showFusionProcess = true;
 

@@ -21,6 +21,12 @@
 using namespace std;
 using namespace cv;
 
+#pragma once
+struct FusionInfo{
+	double distanceToSB;
+	double displacement;
+};
+
 struct PointD{
 	double x,y;
 
@@ -32,6 +38,8 @@ struct PointD{
 	}
 };
 
+
+
 class Radar{
 public:
 	int readInfo();
@@ -42,10 +50,15 @@ public:
 	int getDataPointNum();
 	vector<double> distanceToSB;
 	vector<double> xCoordinates;
+	vector<FusionInfo> fusion;
 
+	map<PointD ,int> getLabelMap();
+
+	void saveImage();
 	void setData(double distanceToSBNum);
 private:
-	double dbscanEPS = 0.1;
+	bool saveData = false;
+	double dbscanEPS = 0.2;
 	int minClusterSize = 5;
 
 	double Rts = 0;
@@ -66,11 +79,16 @@ private:
 	bool checkMagicWord(int readWord, int position);
 	double getDistancePointToStereo(double mag, double ang);
 
-	void DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &labels);
+
+	map<PointD, int> labels;
+	int DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &labels);
 	void expandCluster(PointD P, vector<PointD> sphere_points, int C, double eps, int minPts, map<PointD, int> &labels, vector<PointD> DB);
 	vector<PointD> RangeQuery(vector<PointD> DB, PointD Q,double eps);
 	double EuclidianDistance(PointD a, PointD b);
 	void showClusterResults(map<PointD,int> labels);
 	void expandVector(vector<PointD> &toExpand, vector<PointD> adder);
+
+	//get centroids of DBSCAN
+	vector<PointD> getCentroidsOfClusters(map<PointD,int> labels, int numberOfClusters);
 
 };

@@ -34,7 +34,7 @@ using namespace cv;
 #define SAVEIMAGE false
 #define Profile true
 
-#define SAVERESULTS false
+#define SAVERESULTS true
 
 #define DISPLAY false
 #define SHOWFUSION true
@@ -62,6 +62,7 @@ mutex radarMtx;
 mutex readCameraMtx;
 vector<double> radarToSB;
 vector<double> SBDisplacements;
+vector<FusionInfo> fusionI;
 Fusion fus;
 
 
@@ -83,15 +84,20 @@ __host__ void radarThread(){
 		correctlyRead = radar.readInfo();
 	}*/
 	Radar radar;
-	radar.setData((0.006+0.0028));
+	radar.setData((0.006+0.00278));
 	radar.startRadar();
+
+#if SAVERESULTS
+	radar.saveImage();
+#endif
 	bool copyReadRadar = true;
 	while(copyReadRadar){
 		radar.readInfo();
 		radarMtx.lock();
 		copyReadRadar = readRadar;
-		radarToSB = radar.distanceToSB;
-		SBDisplacements = radar.xCoordinates;
+		//radarToSB = radar.distanceToSB;
+		//SBDisplacements = radar.xCoordinates;
+		fusionI = radar.fusion;
 		radarMtx.unlock();
 	}
 	radar.closeRadar();
@@ -331,8 +337,8 @@ __host__ void SGM(){
 		imshow("Disparity", display);
 #if SAVERESULTS
 		ostringstream imageSaveLocation2;
-				imageSaveLocation2 << "Disparity/" << frame << ".png";
-				imwrite(imageSaveLocation2.str(), display);
+		imageSaveLocation2 << "Disparity/" << frame << ".png";
+		imwrite(imageSaveLocation2.str(), display);
 #endif
 		//Done Display Logic-----------------------------
 #endif
@@ -353,7 +359,7 @@ __host__ void SGM(){
 
 #if USECAMARA && USERADAR
 		//fus.radarPointsInImage(disparity,radarToSB);
-		fus.pointMatchOnImage(disparity,radarToSB,SBDisplacements);
+		fus.pointMatchOnImage(disparity,fusionI);
 		namedWindow("Fusion");
 		Mat showLeft2 = cam.getUnfilterLeft();
 		Mat fusion = fus.displayOnImage(showLeft2);
