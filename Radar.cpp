@@ -298,6 +298,7 @@ vector<PointD> Radar::getCentroidsOfClusters(map<PointD,int> labelsMap, int numb
 	return centroids;
 }
 
+//https://algorithmicthoughts.wordpress.com/2013/05/29/machine-learning-dbscan/
 int Radar::DBSCAN(vector<PointD> DB, double eps, int minPts, map<PointD, int> &labels){
 	int C = 0;
 	for(PointD p : DB){

@@ -29,9 +29,11 @@ void Camera::initCamera(int device){
 	cout << "Enter to continue \n";
 	namedWindow("Image: ESC to continue");
 	Mat image;
+	//Mat imageShow;
 	while(true){
 		//stream.read(image);
 		stream >> image;
+		//resize(image,imageShow,Size(1080,720));
 		imshow("Image: ESC to continue", image);
 		if(waitKey(30)>=0){
 			break;

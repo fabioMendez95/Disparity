@@ -59,7 +59,7 @@ public:
 private:
 	bool saveData = false;
 	double dbscanEPS = 0.2;
-	int minClusterSize = 5;
+	int minClusterSize = 10;
 
 	double Rts = 0;
 	int dataPointNum = 0;

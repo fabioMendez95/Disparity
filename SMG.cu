@@ -1,3 +1,7 @@
+/*
+ * Este trabajo esta dedicado a mi abuelo Favio ELiso Mendez Moncada, al que queria mucho y lamentablemente fallecio el dia 27/2/2018
+ * El siempre creyo en mi, y estaba muy pendiente de todo lo que hacia. Siempre lo recordare.
+ */
 #include <stdio.h>
 #include <iostream>
 #include <string.h>
@@ -28,13 +32,13 @@ using namespace cv;
 
 #define threadx 16
 #define thready 16
-#define CamDevice 0
+#define CamDevice 1
 
 
 #define SAVEIMAGE false
 #define Profile true
 
-#define SAVERESULTS true
+#define SAVERESULTS false
 
 #define DISPLAY false
 #define SHOWFUSION true
@@ -201,9 +205,9 @@ __host__ void SGM(){
 	cout << "Disparity Size : " << widthR << " " << lengthR << endl;
 
 #if USECAMARA && Paths8
-	int threadNum = 199;//382 199
+	int threadNum = 409;//409 199
 #elif USECAMARA
-	int threadNum = 255;
+	int threadNum = 364;//364;//273;
 #else
 	int threadNum = 458; // pathNumber is divisible by this, 437 blocks
 #endif
@@ -213,6 +217,7 @@ __host__ void SGM(){
 #else
 	int pathNumber = widthR *2 + lengthR*2;
 #endif
+	cout << "Path Num: " << pathNumber << " block number: " <<pathNumber/threadNum<< endl;
 	dim3 dimGrid2(pathNumber/threadNum);
 	dim3 dimBlock2(threadNum);
 	//Assigning Paths

@@ -13,7 +13,6 @@ struct ObjectDR{
 	int length;
 	Point centre;
 	double distance;
-	int pointsInside;
 };
 
 struct DivisionImage{
@@ -35,7 +34,10 @@ public:
 	void dontShow();
 
 private:
-	double errorValue = 0.5;
+	double errorValue =2.5;
+
+	int minDimX = 50;
+	int minDimY = 50;
 
 	bool showFusionProcess = true;
 
@@ -55,10 +57,16 @@ private:
 
 	int pixelError = 2;
 
+	double getDisparityDistance(int x, int y, Mat disparity);
+
 	vector<ObjectDR> objects;
 	vector<DivisionImage> getDisivionOnImage(Mat disparity);
 	void getObjectLength(Mat disparity, DivisionImage& segment);
 	void drawSegments(Mat disparity, vector<DivisionImage> segments);
 
+	//Object Processes
+	vector<ObjectDR> processObjects(vector<ObjectDR> objs, Mat disparity);
+	bool overlapRectangles(Point tl1, Point br1,Point tl2, Point br2);
+	ObjectDR expandObject(ObjectDR toExpand, Mat disparity);
 	Size size;
 };
